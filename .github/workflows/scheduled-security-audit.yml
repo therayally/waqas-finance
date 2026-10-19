@@ -1,0 +1,27 @@
+# A new CVE can be published against a dependency with no change on our side, so this checks every Monday whether or not anyone pushed.
+# A finding fails the run loudly (red in Actions, GitHub's failure email). Same idea as Chef Nerd AI's scheduled audit.
+name: Scheduled security audit
+on:
+  schedule:
+    - cron: '17 13 * * 1' # Mondays 13:17 UTC
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: npm advisory database (CVE)
+        run: npm audit --audit-level=moderate
+      - name: Package signatures and provenance
+        run: npm audit signatures
+      - run: npm test

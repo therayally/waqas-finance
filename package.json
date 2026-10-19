@@ -2,7 +2,12 @@
   "name": "waqas-finance-growth-strategy",
   "private": true,
   "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "audit": "npm audit --audit-level=moderate"
+  },
   "dependencies": {
-    "@vercel/functions": "^2.2.0"
+    "@vercel/functions": "3.9.11"
   }
 }

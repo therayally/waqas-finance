@@ -1,0 +1,7 @@
+# Secret scanning: GitHub's default rules, minus the obviously fake values the security tests use.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fake secrets that exist only inside the security tests"
+paths = ['''test/security\.test\.js''']
