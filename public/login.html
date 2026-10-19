@@ -12,15 +12,9 @@
 <div id="gate" class="login-wrap">
   <form class="login-card" id="loginForm" method="post" action="/api/login" autocomplete="off">
     <div class="login-header"><div class="dot" aria-hidden="true"></div><h1>Waqas' Finance Growth Strategy</h1><p>&amp;Shawarma · Aug–Oct 2026</p></div>
-    <div class="field"><label for="u">Name</label><input class="input" id="u" name="username" autocomplete="username" spellcheck="false" required></div>
-    <div class="code-row"><label for="p">Code</label><div class="dots" id="dots" aria-hidden="true"></div></div>
-    <input id="p" name="password" class="sr" type="password" inputmode="numeric" maxlength="32" autocomplete="current-password">
-    <div class="pad" id="pad">
-      <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button>
-      <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button>
-      <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button>
-      <button type="button" class="clr" data-k="C">Clear</button><button type="button" data-k="0">0</button><button type="submit" class="go">Open</button>
-    </div>
+    <div class="field"><label for="u">Name</label><input class="input" id="u" name="username" autocomplete="username" spellcheck="false" autocapitalize="off" required></div>
+    <div class="field"><label for="p">Password</label><input class="input" id="p" name="password" type="password" autocomplete="current-password" required></div>
+    <button type="submit" class="btn btn-primary signin">Sign in</button>
     <div class="err" id="err" role="alert"></div>
   </form>
 </div>
