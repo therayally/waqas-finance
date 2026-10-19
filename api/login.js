@@ -7,10 +7,13 @@ export const config = { runtime: 'edge' };
 const back = (request, code) => new Response(null, { status: 303, headers: { Location: `/login.html?e=${code}`, 'Cache-Control': 'no-store' } });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export default async function handler(request, env = process.env) {
+// Vercel calls the default export as (request, context): the second argument is never the settings.
+export default function handler(request) { return signIn(request); }
+
+export async function signIn(request, env) {
   if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } });
   if (!sameOrigin(request)) { audit('login.rejected_cross_site', request); return new Response('Forbidden', { status: 403 }); }
-  const settings = settingsFrom(env);
+  const settings = env ? settingsFrom(env) : settingsFrom();
   if (!settings.ok) { audit('login.not_configured', request, { problems: settings.problems }); return back(request, 3); }
   const ip = clientIp(request); const limit = limiter();
   if (limit.blocked(ip)) { audit('login.locked_out', request); return back(request, 2); }

@@ -3,7 +3,8 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as sec from '../lib/security.js';
-import login from '../api/login.js';
+import { signIn as login } from '../api/login.js';
+import loginHandler from '../api/login.js';
 import logout from '../api/logout.js';
 
 const SECRET = 'test-secret-that-is-long-enough-0123456789';
@@ -89,4 +90,10 @@ test('the gatekeeper: no session means the sign-in page (or 401 for files); a va
   const tok = await sec.makeToken(SECRET); const ok = await mw(new Request('https://site.test/app.js', { headers: { cookie: `__Host-wfs=${tok}` } })); q.done();
   assert.equal(ok.headers.get('x-middleware-next'), '1'); assert.match(ok.headers.get('set-cookie'), /^__Host-wfs=v1\./); assert.match(ok.headers.get('cache-control'), /no-store/);
   assert.ok(q.logs.some((l) => l.includes('session.rejected')));
+});
+
+test('Vercel calls the sign-in route as (request, context): the settings still come from the environment', async () => {
+  Object.assign(process.env, ENV); const q = quiet();
+  const r = await loginHandler(post({ username: 'Waqas', password: '2015' }), { waitUntil() {} }); q.done();
+  assert.equal(r.status, 303); assert.equal(r.headers.get('location'), '/'); assert.match(r.headers.get('set-cookie'), /^__Host-wfs=v1\./);
 });
