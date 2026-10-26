@@ -8,6 +8,6 @@
     "audit": "npm audit --audit-level=moderate"
   },
   "dependencies": {
-    "@vercel/functions": "3.9.11"
+    "@vercel/functions": "3.10.3"
   }
 }
