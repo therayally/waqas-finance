@@ -33,7 +33,7 @@ const TIMEOUT_MS = 3 * 60 * 1000;
 
 if (!KEY) { console.error('Set PF_API_KEY to the relay key (ask the dashboard for it — Admin / Assistant setup).'); process.exit(1); }
 
-const RELAY_VERSION = '2026-11-02-c';
+const RELAY_VERSION = '2026-11-02-d';
 const log = (...a) => console.log(`[${new Date().toLocaleTimeString()}]`, ...a);
 
 async function api(method, route, body) {
@@ -215,7 +215,8 @@ async function selfUpdate() {
   try {
     const res = await fetch(`${BASE}/pf-relay.mjs?v=${Date.now()}`, { cache: 'no-store' }); if (!res.ok) return;
     const text = await res.text(); const m = /const RELAY_VERSION = '([^']+)'/.exec(text);
-    if (!m || m[1] === RELAY_VERSION || working || !text.startsWith('#!/usr/bin/env node')) return;
+    if (!m || m[1] === RELAY_VERSION || !text.startsWith('#!/usr/bin/env node')) return;
+    if (working) { setTimeout(selfUpdate, 20000); return; } // busy answering something: try again shortly, never skip
     writeFileSync(fileURLToPath(import.meta.url), text); log(`Updated ${RELAY_VERSION} -> ${m[1]}; restarting.`); process.exit(0);
   } catch { /* try again next hour */ }
 }
