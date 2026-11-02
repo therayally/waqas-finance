@@ -127,10 +127,20 @@ async function loadChat() {
   chatMessages = d.messages || []; renderChat();
   if (!chatOpen && chatMessages.length > before && chatMessages[chatMessages.length - 1]?.role === 'assistant') $('#chatFabDot').hidden = false;
 }
+// Polling follows presence: fast (and a heartbeat the relay reads) only while the chat is open on a visible tab;
+// otherwise one slow check a minute, just for the unread dot. Closed means the relay can go almost quiet too.
+let pollTimers = [];
+async function beat() { try { await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ heartbeat: true }) }); } catch { /* presence is best-effort */ } }
+function syncPolling() {
+  pollTimers.forEach(clearInterval); pollTimers = [];
+  if (chatOpen && !document.hidden) { beat(); loadChat(); pollTimers = [setInterval(loadChat, 4000), setInterval(beat, 20000)]; }
+  else pollTimers = [setInterval(loadChat, 60000)];
+}
 function setChatOpen(open) {
   chatOpen = open;
   $('#chatFloat').hidden = !open; $('#chatFab').setAttribute('aria-expanded', String(open));
   if (open) { $('#chatFabDot').hidden = true; $('#chatInput').focus(); }
+  syncPolling();
 }
 function renderAttachChip() {
   const chip = $('#chatAttachChip');
@@ -151,17 +161,25 @@ function wireChat() {
   $('#chatFab').addEventListener('click', () => setChatOpen(!chatOpen));
   $('#chatClose').addEventListener('click', () => setChatOpen(false));
   $('#chatSetupToggle').addEventListener('click', () => { const el = $('#chatSetup'); el.hidden = !el.hidden; });
-  // One-command install with the relay key filled in (same idea as Chef Nerd's "Connect your AI" page)
-  let installCmd = '';
-  fetch('/api/relay-key').then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status === 503 ? 'The relay key is not set up yet.' : 'Could not load the key.')))).then((d) => {
-    installCmd = `curl -fsSL ${location.origin}/install-relay.sh | PF_API_KEY=${d.key} bash`;
-    $('#chatInstallCmd').textContent = installCmd;
-  }).catch((e) => { $('#chatInstallCmd').textContent = e.message; });
-  $('#chatCopyCmd').addEventListener('click', async () => {
-    if (!installCmd) return;
-    try { await navigator.clipboard.writeText(installCmd); $('#chatCopyCmd').textContent = 'Copied'; setTimeout(() => { $('#chatCopyCmd').textContent = 'Copy command'; }, 2000); }
-    catch { const r = document.createRange(); r.selectNodeContents($('#chatInstallCmd')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+  // "Get my setup command": a 10-minute setup code goes into the command; the installer trades it for the key,
+  // so the key never appears here (same idea as Chef Nerd's Connect your AI page).
+  $('#chatGetCmd').addEventListener('click', async () => {
+    const btn = $('#chatGetCmd'); btn.disabled = true;
+    try {
+      const r = await fetch('/api/relay-key'); if (r.status === 401) { location.href = '/login.html'; return; }
+      if (!r.ok) throw new Error(r.status === 503 ? 'The relay key is not set up yet.' : 'Could not get a setup code.');
+      const { code } = await r.json(), o = location.origin;
+      $('#chatCmdMac').textContent = `bash -c "$(curl -fsSL ${o}/install-relay.sh)" -- ${code}`;
+      $('#chatCmdWin').textContent = `& ([scriptblock]::Create((irm "${o}/install-relay.ps1"))) -Code ${code} -Url ${o}`;
+      $('#chatCmdBox').hidden = false; btn.textContent = 'Get a new command';
+    } catch (e) { msg(String(e.message || e), true); }
+    finally { btn.disabled = false; }
   });
+  document.querySelectorAll('.chat-copy').forEach((b) => b.addEventListener('click', async () => {
+    const el = document.getElementById(b.dataset.target);
+    try { await navigator.clipboard.writeText(el.textContent); b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy'; }, 2000); }
+    catch { const r = document.createRange(); r.selectNodeContents(el); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); }
+  }));
   $('#chatAttachBtn').addEventListener('click', () => $('#chatFile').click());
   $('#chatFile').addEventListener('change', async () => {
     const file = $('#chatFile').files[0]; $('#chatFile').value = ''; if (!file) return;
@@ -192,8 +210,8 @@ function wireChat() {
     } catch (err) { input.value = text; pendingAttachment = attachment; renderAttachChip(); msg(String(err.message || err), true); }
     finally { input.disabled = false; input.focus(); }
   });
-  loadChat();
-  setInterval(loadChat, 4000); // picks up the relay's answer, and anything it changed, within a few seconds
+  document.addEventListener('visibilitychange', syncPolling);
+  loadChat(); syncPolling();
 }
 async function pollChatForReply() {
   // after a send, refresh the PF data too once the assistant has answered, since it may have changed something

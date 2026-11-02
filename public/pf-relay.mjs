@@ -15,16 +15,18 @@
 // POLL_SECONDS (default 3, used while there is work or for 2 minutes after), IDLE_POLL_SECONDS (default 20,
 // used the rest of the time — an idle poll is one tiny request, so it costs almost nothing to leave running).
 import { spawn } from 'node:child_process';
-import { writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, rmSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+
+// The installer keeps the key in ~/.pf-relay/env (readable only by you), so the service needs no key on its command line.
+try { for (const line of readFileSync(path.join(os.homedir(), '.pf-relay', 'env'), 'utf8').split('\n')) { const m = /^([A-Z_]+)=(.*)$/.exec(line.trim()); if (m && !process.env[m[1]]) process.env[m[1]] = m[2]; } } catch { /* no env file: PF_API_KEY must be set */ }
 
 const BASE = (process.env.PF_URL || 'https://waqas-finance.vercel.app').replace(/\/$/, '');
 const KEY = process.env.PF_API_KEY;
 const POLL_MS = Math.max(1, Number(process.env.POLL_SECONDS) || 3) * 1000;
-const IDLE_MS = Math.max(POLL_MS, (Number(process.env.IDLE_POLL_SECONDS) || 20) * 1000);
-const BUSY_TAIL_MS = 2 * 60 * 1000; // keep polling fast for 2 minutes after the last message, in case a reply follows
-let lastBusyAt = 0;
+const IDLE_MS = Math.max(POLL_MS, (Number(process.env.IDLE_POLL_SECONDS) || 60) * 1000);
+let chatActive = false; // the dashboard says someone has the chat open right now (see api/agent/inbox.js)
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 const TIMEOUT_MS = 3 * 60 * 1000;
 
@@ -109,8 +111,8 @@ function runClaude(prompt, cwd) {
 
 async function tick() {
   const inbox = await api('GET', '/api/agent/inbox');
+  chatActive = !!inbox.active;
   if (!inbox.message) return;
-  lastBusyAt = Date.now();
   log('Working on:', (inbox.message.body || '(attachment)').slice(0, 90));
   const workDir = path.join(TOOL_DIR, 'incoming', String(inbox.message.id).replace(/[^\w-]/g, ''));
   mkdirSync(workDir, { recursive: true });
@@ -128,12 +130,11 @@ async function tick() {
     try { await api('POST', '/api/agent/reply', { id: inbox.message.id, body: msg }); } catch { /* the message just stays unanswered until the next successful tick */ }
     log('Failed:', e.message);
   } finally { try { rmSync(workDir, { recursive: true, force: true }); } catch { /* temp files; harmless if left */ } }
-  lastBusyAt = Date.now();
+  chatActive = true; // someone just wrote to it, so stay quick for the follow-up
 }
 
-log(`Watching ${BASE} for new chat messages — every ${POLL_MS / 1000}s while there's something to do, every ${IDLE_MS / 1000}s otherwise. Ctrl-C to stop.`);
+log(`Watching ${BASE} — every ${POLL_MS / 1000}s while the chat is open on the dashboard, every ${IDLE_MS / 1000}s when nobody is using it. Claude Code only runs when a message arrives. Ctrl-C to stop.`);
 (async function loop() {
   try { await tick(); } catch (e) { log('Poll error:', e.message); }
-  const busy = Date.now() - lastBusyAt < BUSY_TAIL_MS;
-  setTimeout(loop, busy ? POLL_MS : IDLE_MS);
+  setTimeout(loop, chatActive ? POLL_MS : IDLE_MS);
 })();

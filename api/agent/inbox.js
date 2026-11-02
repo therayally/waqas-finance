@@ -6,12 +6,13 @@
 // machine-to-machine endpoint the relay calls from the person's own computer, which has no session cookie.
 // Bearer auth isn't cookie-based, so it isn't CSRF-able the way api/pf.js and api/chat.js are; no CSRF check here.
 import { safeEqual, audit } from '../../lib/security.js';
-import { getChat, setChat } from '../../lib/store.js';
+import { getChat, setChat, getActive } from '../../lib/store.js';
 
 export const config = { runtime: 'nodejs' };
 
 const CLAIM_MS = 3 * 60 * 1000;
 const HISTORY = 12;
+const ACTIVE_MS = 60 * 1000; // the chat counts as in use for a minute after its last heartbeat or message
 
 async function core(request) {
   const key = process.env.AGENT_RELAY_KEY;
@@ -21,8 +22,9 @@ async function core(request) {
 
   const messages = await getChat([]);
   const now = Date.now();
+  const active = now - ((await getActive()).at || 0) < ACTIVE_MS;
   const msg = messages.find((m) => m.role === 'user' && !m.answered && (!m.claimed_at || now - m.claimed_at > CLAIM_MS));
-  if (!msg) return Response.json({ message: null }, { headers: { 'Cache-Control': 'no-store' } });
+  if (!msg) return Response.json({ message: null, active }, { headers: { 'Cache-Control': 'no-store' } });
   msg.claimed_at = now;
   try { await setChat(messages); } catch { /* worst case the message is handed out twice; harmless, both replies land */ }
 
@@ -32,7 +34,7 @@ async function core(request) {
     .map((m) => `${m.role === 'user' ? 'Waqas' : 'You'}: ${m.body}`)
     .join('\n');
 
-  return Response.json({ message: { id: msg.id, body: msg.body, attachments: msg.attachments || [] }, history }, { headers: { 'Cache-Control': 'no-store' } });
+  return Response.json({ message: { id: msg.id, body: msg.body, attachments: msg.attachments || [] }, history, active }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export default async function handler(req, res) {

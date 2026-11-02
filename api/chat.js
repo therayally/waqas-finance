@@ -5,7 +5,7 @@
 // Node runtime (see api/pf.js for why): the adapter below turns Node's (req, res) into a Web Request/Response so
 // the Fetch-API security helpers (lib/security.js) are reused unchanged.
 import { config as settingsFrom, checkToken, readCookie, sameOrigin, audit } from '../lib/security.js';
-import { getChat, setChat } from '../lib/store.js';
+import { getChat, setChat, setActive } from '../lib/store.js';
 
 export const config = { runtime: 'nodejs' };
 
@@ -35,6 +35,7 @@ async function core(request) {
     if (!sameOrigin(request)) { audit('chat.rejected_cross_site', request); return new Response('Forbidden', { status: 403 }); }
     const len = Number(request.headers.get('content-length') || 0); if (len > 8192) return new Response('Payload too large', { status: 413 });
     let body; try { body = await request.json(); } catch { return new Response('Bad JSON', { status: 400 }); }
+    if (body?.heartbeat) { try { await setActive(Date.now()); } catch { /* presence is best-effort */ } return Response.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } }); }
     const text = String(body?.body || '').trim().slice(0, MAX_LEN);
     const attachments = cleanAttachments(body?.attachments);
     if (!text && !attachments.length) return new Response('Empty message', { status: 400 });
@@ -44,6 +45,7 @@ async function core(request) {
     messages.push(row);
     const trimmed = messages.slice(-KEEP);
     try { await setChat(trimmed); } catch (e) { audit('chat.save_failed', request, { error: String(e.message || e) }); return new Response('Could not save — try again', { status: 502 }); }
+    try { await setActive(Date.now()); } catch { /* best-effort */ }
     audit('chat.sent', request);
     return Response.json({ messages: trimmed }, { headers: { 'Cache-Control': 'no-store' } });
   }

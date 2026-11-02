@@ -82,9 +82,15 @@
   <div class="chat-float-head"><span>Assistant</span><button type="button" id="chatClose" class="btn" style="padding:0.25rem 0.5rem">&times;</button></div>
   <p class="chat-float-sub">Runs as Claude Code on your own computer, not a hosted AI this app pays for. <button type="button" id="chatSetupToggle" class="linklike">Setup</button></p>
   <div id="chatSetup" class="chat-setup" hidden>
-    <p>On the Mac that has Claude Code installed and signed in, paste this once in Terminal. It installs the relay as a background service that starts at login — no window to leave open.</p>
-    <code id="chatInstallCmd" class="chat-cmd">loading…</code>
-    <button type="button" id="chatCopyCmd" class="btn" style="margin-top:0.4rem;padding:0.3rem 0.7rem">Copy command</button>
+    <p>On the computer that has Claude Code installed and signed in. It installs the relay as a background service that starts at login — no window to leave open.</p>
+    <button type="button" id="chatGetCmd" class="btn btn-primary" style="padding:0.35rem 0.8rem">Get my setup command</button>
+    <div id="chatCmdBox" hidden>
+      <p class="chat-cmd-label">Mac or Linux — paste in Terminal:</p><code id="chatCmdMac" class="chat-cmd"></code>
+      <button type="button" class="btn chat-copy" data-target="chatCmdMac" style="margin-top:0.3rem;padding:0.25rem 0.6rem">Copy</button>
+      <p class="chat-cmd-label">Windows (not yet tested) — paste in PowerShell:</p><code id="chatCmdWin" class="chat-cmd"></code>
+      <button type="button" class="btn chat-copy" data-target="chatCmdWin" style="margin-top:0.3rem;padding:0.25rem 0.6rem">Copy</button>
+      <p class="chat-cmd-label">The code works for 10 minutes. The key itself is never shown.</p>
+    </div>
   </div>
   <div id="chatLog" class="chat-log"></div>
   <div id="chatAttachChip" class="chat-attach-chip" hidden></div>

@@ -6,7 +6,7 @@
 import { next } from '@vercel/functions';
 import { config as settingsFrom, checkToken, makeToken, readCookie, cookie, audit } from './lib/security.js';
 
-export const config = { matcher: ['/((?!login\\.html|login\\.js|app\\.css|fonts/|robots\\.txt|pf-relay\\.mjs|install-relay\\.sh|api/login|api/logout|api/agent/|api/pf$).*)'] };
+export const config = { matcher: ['/((?!login\\.html|login\\.js|app\\.css|fonts/|robots\\.txt|pf-relay\\.mjs|install-relay\\.(?:sh|ps1)|api/login|api/logout|api/agent/|api/pf$).*)'] };
 
 export default async function middleware(request) {
   const s = settingsFrom();
