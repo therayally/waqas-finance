@@ -158,3 +158,12 @@ details.play summary::-webkit-details-marker { display: none; }
 .stp .body { display: grid; grid-template-columns: 1fr; gap: 0; padding: 0 0 0.8rem; } .stp h5, details.more h5 { margin: 0.7rem 0 0.3rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); } .stp p, details.more p { margin: 0.2rem 0; font-size: 0.85rem; } .stp ul, .stp ol, details.more ul, details.more ol { margin: 0; padding-left: 1.15rem; font-size: 0.85rem; } .stp li, details.more li { margin: 0.2rem 0; }
 details.more { margin-top: 0.5rem; } details.more > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; font-size: 0.8rem; font-weight: 600; color: var(--primary-text); } details.more > summary::-webkit-details-marker { display: none; } details.more .body { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0.3rem 0 0.4rem; } @media (max-width: 640px) { details.more .body { grid-template-columns: 1fr; } }
 .ui-t .what small { display: block; color: var(--muted); font-size: 0.78rem; }
+
+/* assistant chat */
+.chat-log { display: flex; flex-direction: column; gap: 0.5rem; max-height: 26rem; overflow-y: auto; margin-bottom: 0.9rem; }
+.chat-log:empty::before { content: 'No messages yet — say something below.'; color: var(--muted); font-size: 0.85rem; }
+.msg { max-width: 85%; padding: 0.55rem 0.8rem; border-radius: 0.6rem; font-size: 0.875rem; line-height: 1.4; white-space: pre-wrap; }
+.msg.user { align-self: flex-end; background: var(--primary-btn); color: #fff; border-bottom-right-radius: 0.15rem; }
+.msg.assistant { align-self: flex-start; background: var(--soft); color: var(--strong); border-bottom-left-radius: 0.15rem; }
+.msg.pending { opacity: 0.6; font-style: italic; }
+.chat-form { display: flex; gap: 0.6rem; } .chat-form .input { flex: 1; }

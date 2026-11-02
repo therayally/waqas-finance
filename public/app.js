@@ -104,8 +104,53 @@ function wireForms() {
 // sidebar: highlight the section in view
 function spy() { const links = [...document.querySelectorAll('#nav a')]; const obs = new IntersectionObserver((es) => { es.forEach((e) => { if (e.isIntersecting) links.forEach((a) => a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id)); }); }, { rootMargin: '-30% 0px -60% 0px' }); document.querySelectorAll('.content section').forEach((s) => obs.observe(s)); }
 
+/* ---------- assistant chat ----------
+ * The reply doesn't come back from this request: it's answered by the local relay (public/pf-relay.mjs), which
+ * polls /api/agent/inbox and posts to /api/agent/reply. This tab just shows /api/chat and polls it so the
+ * answer (and anything it changed on the dashboard) shows up once the relay's done. */
+let chatMessages = [];
+function renderChat() {
+  const log = $('#chatLog');
+  const stayedAtBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
+  log.innerHTML = chatMessages.map((m) => `<div class="msg ${m.role}${m.role === 'user' && !m.answered ? ' pending' : ''}">${escapeHtml(m.body)}</div>`).join('');
+  if (stayedAtBottom) log.scrollTop = log.scrollHeight;
+}
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+async function loadChat() {
+  const r = await fetch('/api/chat'); if (!r.ok) return;
+  const d = await r.json(); chatMessages = d.messages || []; renderChat();
+}
+function wireChat() {
+  $('#chatForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = $('#chatInput'), text = input.value.trim(); if (!text) return;
+    input.value = ''; input.disabled = true;
+    try {
+      const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body: text }) });
+      if (r.status === 401) { location.href = '/login.html'; return; }
+      if (!r.ok) throw new Error(await r.text().catch(() => 'Could not send'));
+      const d = await r.json(); chatMessages = d.messages || []; renderChat();
+      // after sending, a dashboard-affecting reply may land any moment, so refresh the numbers once it does
+      pollChatForReply();
+    } catch (err) { input.value = text; msg(String(err.message || err), true); }
+    finally { input.disabled = false; input.focus(); }
+  });
+  loadChat();
+  setInterval(loadChat, 4000); // picks up the relay's answer, and anything it changed, within a few seconds
+}
+async function pollChatForReply() {
+  // after a send, refresh the PF data too once the assistant has answered, since it may have changed something
+  const before = chatMessages.length;
+  for (let i = 0; i < 20; i++) { // up to ~40s
+    await new Promise((r) => setTimeout(r, 2000));
+    await loadChat();
+    if (chatMessages.length > before) { try { PF = await api(); renderAll(); } catch { /* chat still shows the reply even if this refresh fails */ } return; }
+  }
+}
+
 (async function init() {
   wireForms();
+  wireChat();
   try { PF = await api(); renderAll(); try { spy(); } catch (e) {} }
   catch (e) { $('#pfMsg').textContent = 'Could not load your data: ' + (e.message || e); $('#pfMsg').style.color = 'var(--danger)'; }
 })();
