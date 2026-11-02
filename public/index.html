@@ -15,6 +15,7 @@
     <nav id="nav">
       <div class="nav-label">Overview</div>
       <a href="#overview" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.2 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.6-.6-3-1.6M12 6v2M12 16v2"/></svg>Summary</a>
+      <a href="#savings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4M11 8v6M9 10h4"/></svg>Savings</a>
       <div class="nav-label">Details</div>
       <a href="#income"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10M12 4l5 5M12 4 7 9"/></svg>Income</a>
       <a href="#expenses"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h10M7 17h6"/></svg>Expenses</a>
@@ -24,7 +25,7 @@
   </aside>
   <div class="main">
     <div class="topbar"><h1><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.2 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.6-.6-3-1.6M12 6v2M12 16v2"/></svg>Personal Finance</h1><span class="meta">Monthly averages for now</span></div>
-    <div class="mobile-top"><a href="#overview">Summary</a><a href="#income">Income</a><a href="#expenses">Expenses</a><a href="#accounts">Accounts</a><form method="post" action="/api/logout" class="m-lock"><button type="submit">Lock</button></form></div>
+    <div class="mobile-top"><a href="#overview">Summary</a><a href="#savings">Savings</a><a href="#income">Income</a><a href="#expenses">Expenses</a><a href="#accounts">Accounts</a><form method="post" action="/api/logout" class="m-lock"><button type="submit">Lock</button></form></div>
     <div class="content">
       <div class="note" id="pfMsg" style="min-height:1.1rem"></div>
       <section id="overview">
@@ -35,6 +36,15 @@
           <div class="panel"><h3>Where the money goes</h3><p class="card-sub">Monthly expenses, by category</p><div id="pfSpendByCat"></div></div>
         </div>
         <div class="panel" style="margin-top:1rem"><h3>Income vs. expenses over time</h3><p class="card-sub">One point today; add a month to see income vs. expenses move over time</p><div class="scroll" id="pfTrend"></div></div>
+      </section>
+      <section id="savings">
+        <div class="sec-head"><h2>Savings review</h2><p>Researches where money could be saved — debt and loan options, tax write-offs and credits, programs he may qualify for, idle cash — using his numbers above and live web research. It runs on your own computer through the assistant relay and can take 5-15 minutes. It is research to take to a CPA and a lender, not tax or financial advice.</p></div>
+        <div class="panel">
+          <div class="inputs"><label style="flex:1;min-width:14rem">Anything to focus on? (optional)<input class="input" id="savFocus" style="width:100%" placeholder="e.g. refinancing the HELOC and the SBA loan"></label></div>
+          <button class="btn btn-primary" id="savRun" type="button" style="margin-top:0.7rem">Run savings review</button>
+          <p class="note" id="savStatus"></p>
+          <div id="savReport" class="report"></div>
+        </div>
       </section>
       <section id="income">
         <div class="sec-head"><h2>Income</h2><p>Every recurring monthly source.</p></div>

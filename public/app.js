@@ -223,9 +223,48 @@ async function pollChatForReply() {
   }
 }
 
+/* ---------- savings review ---------- */
+function md(text) {
+  // Tiny markdown: headings, bullets, **bold**, `code`, [text](http link). Everything is escaped first, so nothing in the report can inject HTML.
+  const inline = (t) => escapeHtml(t).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  let out = '', list = false;
+  for (const raw of String(text).split('\n')) {
+    const line = raw.trimEnd(); const li = /^\s*[-*]\s+(.*)$/.exec(line);
+    if (li) { if (!list) { out += '<ul>'; list = true; } out += `<li>${inline(li[1])}</li>`; continue; }
+    if (list) { out += '</ul>'; list = false; }
+    const h = /^(#{1,3})\s+(.*)$/.exec(line);
+    if (h) out += `<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`; else if (line.trim()) out += `<p>${inline(line)}</p>`;
+  }
+  return out + (list ? '</ul>' : '');
+}
+let savJobs = [];
+function renderSavings() {
+  const last = savJobs[savJobs.length - 1], st = $('#savStatus'), run = $('#savRun');
+  const busy = last && (last.status === 'queued' || last.status === 'running') && Date.now() - last.at < 30 * 60 * 1000;
+  run.disabled = !!busy;
+  if (!last) { st.textContent = 'No review yet.'; $('#savReport').innerHTML = ''; return; }
+  const when = new Date(last.finished_at || last.at).toLocaleString();
+  st.textContent = last.status === 'queued' ? 'Waiting for the assistant relay to pick it up…' : last.status === 'running' ? 'Researching now — this takes several minutes. You can leave this page; the report will be here.' : last.status === 'failed' ? `Failed (${when}).` : `Finished ${when}.`;
+  $('#savReport').innerHTML = last.report ? md(last.report) : '';
+}
+async function loadSavings() { try { const r = await fetch('/api/savings'); if (r.ok) { savJobs = (await r.json()).jobs || []; renderSavings(); } } catch { /* shown on the next poll */ } }
+function wireSavings() {
+  $('#savRun').addEventListener('click', async () => {
+    $('#savRun').disabled = true;
+    try {
+      const r = await fetch('/api/savings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ focus: $('#savFocus').value }) });
+      if (r.status === 401) { location.href = '/login.html'; return; }
+      if (!r.ok) throw new Error(await r.text().catch(() => 'Could not start the review'));
+      savJobs = (await r.json()).jobs || []; renderSavings();
+    } catch (e) { msg(String(e.message || e), true); $('#savRun').disabled = false; }
+  });
+  loadSavings(); setInterval(() => { const l = savJobs[savJobs.length - 1]; if (!document.hidden && l && (l.status === 'queued' || l.status === 'running')) loadSavings(); }, 15000);
+}
+
 (async function init() {
   wireForms();
   wireChat();
+  wireSavings();
   try { PF = await api(); renderAll(); try { spy(); } catch (e) {} }
   catch (e) { $('#pfMsg').textContent = 'Could not load your data: ' + (e.message || e); $('#pfMsg').style.color = 'var(--danger)'; }
 })();

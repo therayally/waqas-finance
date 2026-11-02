@@ -6,7 +6,7 @@
 // machine-to-machine endpoint the relay calls from the person's own computer, which has no session cookie.
 // Bearer auth isn't cookie-based, so it isn't CSRF-able the way api/pf.js and api/chat.js are; no CSRF check here.
 import { safeEqual, audit } from '../../lib/security.js';
-import { getChat, setChat, getActive } from '../../lib/store.js';
+import { getChat, setChat, getActive, getJobs, setJobs, getPF } from '../../lib/store.js';
 
 export const config = { runtime: 'nodejs' };
 
@@ -24,7 +24,17 @@ async function core(request) {
   const now = Date.now();
   const active = now - ((await getActive()).at || 0) < ACTIVE_MS;
   const msg = messages.find((m) => m.role === 'user' && !m.answered && (!m.claimed_at || now - m.claimed_at > CLAIM_MS));
-  if (!msg) return Response.json({ message: null, active }, { headers: { 'Cache-Control': 'no-store' } });
+  if (!msg) {
+    // No chat message waiting: hand out a queued savings review (with the current dashboard numbers), if any.
+    const jobs = await getJobs();
+    const job = jobs.find((j) => j.status === 'queued' || (j.status === 'running' && now - (j.started_at || 0) > 25 * 60 * 1000));
+    if (job) {
+      job.status = 'running'; job.started_at = now;
+      try { await setJobs(jobs); } catch { /* worst case it is handed out again */ }
+      return Response.json({ message: null, active, job: { id: job.id, focus: job.focus || '', data: await getPF(null) } }, { headers: { 'Cache-Control': 'no-store' } });
+    }
+    return Response.json({ message: null, active }, { headers: { 'Cache-Control': 'no-store' } });
+  }
   msg.claimed_at = now;
   try { await setChat(messages); } catch { /* worst case the message is handed out twice; harmless, both replies land */ }
 
