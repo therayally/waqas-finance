@@ -104,11 +104,12 @@ function wireForms() {
 // sidebar: highlight the section in view
 function spy() { const links = [...document.querySelectorAll('#nav a')]; const obs = new IntersectionObserver((es) => { es.forEach((e) => { if (e.isIntersecting) links.forEach((a) => a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id)); }); }, { rootMargin: '-30% 0px -60% 0px' }); document.querySelectorAll('.content section').forEach((s) => obs.observe(s)); }
 
-/* ---------- assistant chat ----------
+/* ---------- assistant chat: a floating widget, present on every tab ----------
  * The reply doesn't come back from this request: it's answered by the local relay (public/pf-relay.mjs), which
- * polls /api/agent/inbox and posts to /api/agent/reply. This tab just shows /api/chat and polls it so the
+ * polls /api/agent/inbox and posts to /api/agent/reply. This widget just shows /api/chat and polls it so the
  * answer (and anything it changed on the dashboard) shows up once the relay's done. */
 let chatMessages = [];
+let chatOpen = false;
 function renderChat() {
   const log = $('#chatLog');
   const stayedAtBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
@@ -118,9 +119,19 @@ function renderChat() {
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 async function loadChat() {
   const r = await fetch('/api/chat'); if (!r.ok) return;
-  const d = await r.json(); chatMessages = d.messages || []; renderChat();
+  const d = await r.json(); const before = chatMessages.length;
+  chatMessages = d.messages || []; renderChat();
+  if (!chatOpen && chatMessages.length > before && chatMessages[chatMessages.length - 1]?.role === 'assistant') $('#chatFabDot').hidden = false;
+}
+function setChatOpen(open) {
+  chatOpen = open;
+  $('#chatFloat').hidden = !open; $('#chatFab').setAttribute('aria-expanded', String(open));
+  if (open) { $('#chatFabDot').hidden = true; $('#chatInput').focus(); }
 }
 function wireChat() {
+  $('#chatFab').addEventListener('click', () => setChatOpen(!chatOpen));
+  $('#chatClose').addEventListener('click', () => setChatOpen(false));
+  $('#chatSetupToggle').addEventListener('click', () => { const el = $('#chatSetup'); el.hidden = !el.hidden; });
   $('#chatForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const input = $('#chatInput'), text = input.value.trim(); if (!text) return;
