@@ -11,8 +11,9 @@
 //   PF_API_KEY=<the relay key> node pf-relay.mjs
 //
 // Requires Node 18+ and the `claude` CLI (Claude Code) already installed and signed in on this machine.
-// Optional env: PF_URL (default https://waqas-finance.vercel.app), POLL_SECONDS (default 5), CLAUDE_BIN (default
-// `claude` on PATH).
+// Optional env: PF_URL (default https://waqas-finance.vercel.app), CLAUDE_BIN (default `claude` on PATH),
+// POLL_SECONDS (default 3, used while there is work or for 2 minutes after), IDLE_POLL_SECONDS (default 20,
+// used the rest of the time — an idle poll is one tiny request, so it costs almost nothing to leave running).
 import { spawn } from 'node:child_process';
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
@@ -20,7 +21,10 @@ import os from 'node:os';
 
 const BASE = (process.env.PF_URL || 'https://waqas-finance.vercel.app').replace(/\/$/, '');
 const KEY = process.env.PF_API_KEY;
-const POLL_MS = Math.max(2, Number(process.env.POLL_SECONDS) || 5) * 1000;
+const POLL_MS = Math.max(1, Number(process.env.POLL_SECONDS) || 3) * 1000;
+const IDLE_MS = Math.max(POLL_MS, (Number(process.env.IDLE_POLL_SECONDS) || 20) * 1000);
+const BUSY_TAIL_MS = 2 * 60 * 1000; // keep polling fast for 2 minutes after the last message, in case a reply follows
+let lastBusyAt = 0;
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 const TIMEOUT_MS = 3 * 60 * 1000;
 
@@ -95,6 +99,7 @@ function runClaude(prompt) {
 async function tick() {
   const inbox = await api('GET', '/api/agent/inbox');
   if (!inbox.message) return;
+  lastBusyAt = Date.now();
   log('Working on:', inbox.message.body.slice(0, 90));
   try {
     const reply = await runClaude(buildPrompt(inbox.message.body, inbox.history));
@@ -105,10 +110,12 @@ async function tick() {
     try { await api('POST', '/api/agent/reply', { id: inbox.message.id, body: msg }); } catch { /* the message just stays unanswered until the next successful tick */ }
     log('Failed:', e.message);
   }
+  lastBusyAt = Date.now();
 }
 
-log(`Watching ${BASE} for new chat messages, every ${POLL_MS / 1000}s. Ctrl-C to stop.`);
+log(`Watching ${BASE} for new chat messages — every ${POLL_MS / 1000}s while there's something to do, every ${IDLE_MS / 1000}s otherwise. Ctrl-C to stop.`);
 (async function loop() {
   try { await tick(); } catch (e) { log('Poll error:', e.message); }
-  setTimeout(loop, POLL_MS);
+  const busy = Date.now() - lastBusyAt < BUSY_TAIL_MS;
+  setTimeout(loop, busy ? POLL_MS : IDLE_MS);
 })();
