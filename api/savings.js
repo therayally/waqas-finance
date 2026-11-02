@@ -3,7 +3,7 @@
 // computer with Claude Code and web search, and posts the finished report to api/agent/report.js.
 // Node runtime + adapter: see api/pf.js for why.
 import { config as settingsFrom, checkToken, readCookie, sameOrigin, audit } from '../lib/security.js';
-import { getJobs, setJobs, setActive, getPF } from '../lib/store.js';
+import { getJobs, setJobs, setActive, getPF, getRelaySeen } from '../lib/store.js';
 
 export const config = { runtime: 'nodejs' };
 
@@ -19,7 +19,7 @@ async function core(request) {
   const session = s.ok ? await checkToken(s.secret, readCookie(request)) : { ok: false };
   if (!session.ok) return new Response('Unauthorized', { status: 401, headers: { 'Cache-Control': 'no-store' } });
 
-  if (request.method === 'GET') return Response.json({ jobs: await getJobs(), pf_sig: await pfSig() }, { headers: { 'Cache-Control': 'private, no-store' } });
+  if (request.method === 'GET') return Response.json({ jobs: await getJobs(), pf_sig: await pfSig(), relay: await getRelaySeen() }, { headers: { 'Cache-Control': 'private, no-store' } });
 
   if (request.method === 'POST') {
     if (!sameOrigin(request)) { audit('savings.rejected_cross_site', request); return new Response('Forbidden', { status: 403 }); }

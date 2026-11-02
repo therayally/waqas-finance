@@ -187,6 +187,10 @@ details.more { margin-top: 0.5rem; } details.more > summary { list-style: none; 
   body.printing-report .shell { display: block; } body.printing-report .panel { border: none; box-shadow: none; padding: 0; } body.printing-report .content { padding: 0; max-width: none; }
   body.printing-report .report { max-width: none; font-size: 11pt; color: #000; } body.printing-report .report a { color: #000; text-decoration: none; }
 }
+.conn-status { margin: 0; font-weight: 600; color: var(--strong); display: flex; align-items: center; gap: 0.5rem; }
+.conn-status::before { content: ''; width: 0.6rem; height: 0.6rem; border-radius: 999px; background: var(--muted); flex: none; }
+.conn-status.on::before { background: var(--success); } .conn-status.off::before { background: var(--danger); }
+.nav-dot { margin-left: auto; width: 0.5rem; height: 0.5rem; border-radius: 999px; background: var(--success); } .nav-dot.off { background: var(--danger); }
 /* insights */
 .ins-cards { display: grid; gap: 0.7rem; margin-top: 0.9rem; }
 .ins-card { border: 1px solid var(--border-soft); border-radius: 0.375rem; padding: 0.75rem 0.9rem; }

@@ -33,13 +33,13 @@ const TIMEOUT_MS = 3 * 60 * 1000;
 
 if (!KEY) { console.error('Set PF_API_KEY to the relay key (ask the dashboard for it — Admin / Assistant setup).'); process.exit(1); }
 
-const RELAY_VERSION = '2026-11-02-f';
+const RELAY_VERSION = '2026-11-02-g';
 const log = (...a) => console.log(`[${new Date().toLocaleTimeString()}]`, ...a);
 
 async function api(method, route, body) {
   const res = await fetch(BASE + route, {
     method,
-    headers: { Authorization: `Bearer ${KEY}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    headers: { Authorization: `Bearer ${KEY}`, 'X-Relay-Version': RELAY_VERSION, ...(body ? { 'Content-Type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) throw new Error(`${method} ${route} -> ${res.status} ${(await res.text()).slice(0, 200)}`);

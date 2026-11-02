@@ -161,7 +161,7 @@ function fileToBase64(file) {
 function wireChat() {
   $('#chatFab').addEventListener('click', () => setChatOpen(!chatOpen));
   $('#chatClose').addEventListener('click', () => setChatOpen(false));
-  $('#chatSetupToggle').addEventListener('click', () => { const el = $('#chatSetup'); el.hidden = !el.hidden; });
+  $('#chatSetupLink').addEventListener('click', () => setChatOpen(false));
   // "Get my setup command": a 10-minute setup code goes into the command; the installer trades it for the key,
   // so the key never appears here (same idea as Chef Nerd's Connect your AI page).
   $('#chatGetCmd').addEventListener('click', async () => {
@@ -173,6 +173,7 @@ function wireChat() {
       $('#chatCmdMac').textContent = `bash -c "$(curl -fsSL ${o}/install-relay.sh)" -- ${code}`;
       $('#chatCmdWin').textContent = `& ([scriptblock]::Create((irm "${o}/install-relay.ps1"))) -Code ${code} -Url ${o}`;
       $('#chatCmdBox').hidden = false; btn.textContent = 'Get a new command';
+      let n = 0; const t = setInterval(() => { loadSavings(); if (++n >= 20 || (relayInfo && Date.now() - relayInfo.at < 4 * 60 * 1000 && n > 1)) clearInterval(t); }, 15000);
     } catch (e) { msg(String(e.message || e), true); }
     finally { btn.disabled = false; }
   });
@@ -267,6 +268,18 @@ function wireInsights() {
   });
 }
 
+/* ---------- connect your AI: is the relay on your computer checking in? ---------- */
+function renderConnect() {
+  const el = $('#connStatus'), dot = $('#navConn'), sub = $('#chatConn'); if (!el) return;
+  const ago = relayInfo && relayInfo.at ? Date.now() - relayInfo.at : Infinity;
+  const on = ago < 4 * 60 * 1000; // it checks in at least every minute or two
+  const mins = Math.round(ago / 60000);
+  el.className = 'conn-status ' + (on ? 'on' : 'off');
+  el.textContent = on ? `Connected — the assistant on your computer checked in ${mins < 1 ? 'just now' : mins + ' min ago'}${relayInfo.version ? ' (version ' + relayInfo.version + ')' : ''}.` : (relayInfo && relayInfo.at ? `Not connected — last seen ${new Date(relayInfo.at).toLocaleString()}. Run the command below on the computer with Claude Code.` : 'Not connected yet. Get the setup command below and run it on the computer that has Claude Code.');
+  dot.hidden = false; dot.className = 'nav-dot' + (on ? '' : ' off');
+  sub.textContent = on ? 'Runs as Claude Code on your computer.' : 'Not connected — the assistant can\'t answer yet.';
+}
+
 /* ---------- overview report ---------- */
 function renderReport() {
   const last = lastOf('report'), st = $('#repStatus'), run = $('#repRun');
@@ -317,7 +330,7 @@ function md(text) {
   }
   return out + (list ? '</ul>' : '');
 }
-let savJobs = [], pfSigNow = '';
+let savJobs = [], pfSigNow = '', relayInfo = null;
 const lastOf = (kind) => [...savJobs].reverse().find((j) => (j.kind || 'savings') === kind);
 function renderSavings() {
   const last = lastOf('savings'), st = $('#savStatus'), run = $('#savRun');
@@ -328,7 +341,7 @@ function renderSavings() {
   st.textContent = last.status === 'queued' ? 'Waiting for the assistant relay to pick it up…' : last.status === 'running' ? 'Researching now — this takes several minutes. You can leave this page; the report will be here.' : last.status === 'failed' ? `Failed (${when}).` : `Finished ${when}.`;
   $('#savReport').innerHTML = last.report ? md(last.report) : '';
 }
-async function loadSavings() { try { const r = await fetch('/api/savings'); if (r.ok) { const d = await r.json(); savJobs = d.jobs || []; pfSigNow = d.pf_sig || ''; renderSavings(); renderInsights(); renderReport(); } } catch { /* shown on the next poll */ } }
+async function loadSavings() { try { const r = await fetch('/api/savings'); if (r.ok) { const d = await r.json(); savJobs = d.jobs || []; pfSigNow = d.pf_sig || ''; relayInfo = d.relay || null; renderSavings(); renderInsights(); renderReport(); renderConnect(); } } catch { /* shown on the next poll */ } }
 function wireSavings() {
   $('#savRun').addEventListener('click', async () => {
     $('#savRun').disabled = true;

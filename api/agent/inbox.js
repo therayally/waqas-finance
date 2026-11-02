@@ -6,7 +6,7 @@
 // machine-to-machine endpoint the relay calls from the person's own computer, which has no session cookie.
 // Bearer auth isn't cookie-based, so it isn't CSRF-able the way api/pf.js and api/chat.js are; no CSRF check here.
 import { safeEqual, audit } from '../../lib/security.js';
-import { getChat, setChat, getActive, getJobs, setJobs, getPF } from '../../lib/store.js';
+import { getChat, setChat, getActive, getJobs, setJobs, getPF, getRelaySeen, setRelaySeen } from '../../lib/store.js';
 
 export const config = { runtime: 'nodejs' };
 
@@ -28,6 +28,8 @@ async function core(request) {
 
   const messages = await getChat([]);
   const now = Date.now();
+  const version = String(request.headers.get('x-relay-version') || '').slice(0, 40);
+  try { const seen = await getRelaySeen(); if (now - (seen.at || 0) > 90 * 1000 || seen.version !== version) await setRelaySeen({ at: now, version }); } catch { /* status only */ }
   const active = now - ((await getActive()).at || 0) < ACTIVE_MS;
   const msg = messages.find((m) => m.role === 'user' && !m.answered && (!m.claimed_at || now - m.claimed_at > CLAIM_MS));
   if (!msg) {
