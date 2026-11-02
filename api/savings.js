@@ -3,12 +3,15 @@
 // computer with Claude Code and web search, and posts the finished report to api/agent/report.js.
 // Node runtime + adapter: see api/pf.js for why.
 import { config as settingsFrom, checkToken, readCookie, sameOrigin, audit } from '../lib/security.js';
-import { getJobs, setJobs, setActive } from '../lib/store.js';
+import { getJobs, setJobs, setActive, getPF } from '../lib/store.js';
 
 export const config = { runtime: 'nodejs' };
 
 const uid = () => Math.random().toString(36).slice(2, 10);
-const KEEP = 10;
+const KEEP = 12;
+const KINDS = new Set(['savings', 'insights']);
+// A short fingerprint of the dashboard numbers, so the Insights tab can say "your numbers changed since this was run".
+async function pfSig() { const d = await getPF(null); if (!d) return ''; const t = JSON.stringify([d.cash, d.income, d.expenses, d.liabilities]); let h = 5381; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0; return String(h >>> 0); }
 const STALE_MS = 30 * 60 * 1000; // a job still "running" after this long is treated as dead, so a new one can start
 
 async function core(request) {
@@ -16,7 +19,7 @@ async function core(request) {
   const session = s.ok ? await checkToken(s.secret, readCookie(request)) : { ok: false };
   if (!session.ok) return new Response('Unauthorized', { status: 401, headers: { 'Cache-Control': 'no-store' } });
 
-  if (request.method === 'GET') return Response.json({ jobs: await getJobs() }, { headers: { 'Cache-Control': 'private, no-store' } });
+  if (request.method === 'GET') return Response.json({ jobs: await getJobs(), pf_sig: await pfSig() }, { headers: { 'Cache-Control': 'private, no-store' } });
 
   if (request.method === 'POST') {
     if (!sameOrigin(request)) { audit('savings.rejected_cross_site', request); return new Response('Forbidden', { status: 403 }); }
@@ -25,11 +28,12 @@ async function core(request) {
     const jobs = await getJobs(); const now = Date.now();
     const open = jobs.find((j) => (j.status === 'queued' || j.status === 'running') && now - j.at < STALE_MS);
     if (open) return Response.json({ jobs, already: true }, { headers: { 'Cache-Control': 'no-store' } });
-    jobs.push({ id: uid(), status: 'queued', at: now, focus: String(body?.focus || '').trim().slice(0, 600) });
+    const kind = KINDS.has(body?.kind) ? body.kind : 'savings';
+    jobs.push({ id: uid(), kind, status: 'queued', at: now, focus: String(body?.focus || '').trim().slice(0, 600), pf_sig: await pfSig() });
     const kept = jobs.slice(-KEEP);
     try { await setJobs(kept); await setActive(now); } catch (e) { audit('savings.save_failed', request, { error: String(e.message || e) }); return new Response('Could not save \u2014 try again', { status: 502 }); }
     audit('savings.queued', request);
-    return Response.json({ jobs: kept }, { headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ jobs: kept, pf_sig: await pfSig() }, { headers: { 'Cache-Control': 'no-store' } });
   }
   return new Response('Method not allowed', { status: 405, headers: { Allow: 'GET, POST', 'Cache-Control': 'no-store' } });
 }

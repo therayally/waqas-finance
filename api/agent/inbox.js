@@ -31,7 +31,7 @@ async function core(request) {
     if (job) {
       job.status = 'running'; job.started_at = now;
       try { await setJobs(jobs); } catch { /* worst case it is handed out again */ }
-      return Response.json({ message: null, active, job: { id: job.id, focus: job.focus || '', data: await getPF(null) } }, { headers: { 'Cache-Control': 'no-store' } });
+      return Response.json({ message: null, active, job: { id: job.id, kind: job.kind || 'savings', focus: job.focus || '', data: await getPF(null) } }, { headers: { 'Cache-Control': 'no-store' } });
     }
     return Response.json({ message: null, active }, { headers: { 'Cache-Control': 'no-store' } });
   }

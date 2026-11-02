@@ -82,6 +82,7 @@ function renderLiabRows() {
   $('#pfLiabRows').innerHTML = PF.liabilities.length ? PF.liabilities.map((x) => `<tr><td>${x.k}</td><td class="r">${x.balance != null ? money(x.balance) : '—'}</td><td class="r">${money(x.payment)}/mo</td><td>${delBtn('liabilities', x.id)}</td></tr>`).join('') : `<tr><td colspan="4" style="color:var(--muted)">Nothing added yet.</td></tr>`;
 }
 function renderAll() {
+  if (typeof renderInsights === 'function') renderInsights();
   renderKpis(); renderIncomeChart(); renderSpendChart(); renderTrend(); renderIncomeRows(); renderExpenseRows(); renderCashRows(); renderLiabRows();
 }
 
@@ -223,6 +224,49 @@ async function pollChatForReply() {
   }
 }
 
+/* ---------- insights: instant ratios + AI cards ---------- */
+function insightMetrics() {
+  if (!PF) return [];
+  const t = totals(), inc = t.income || 0, byCat = (c) => PF.expenses.filter((e) => e.cat === c).reduce((a, e) => a + e.v, 0);
+  const pay = PF.liabilities.reduce((a, l) => a + (l.payment || 0), 0), pct0 = (n) => (inc ? Math.round(n / inc * 100) + '%' : '—');
+  const top = [...PF.income].sort((a, b) => b.v - a.v)[0], sba = PF.liabilities.find((l) => /sba/i.test(l.k)), dist = PF.income.find((i) => /distribution/i.test(i.k));
+  const m = [
+    { k: 'Kept after expenses', v: pct0(inc - t.expense), sub: money(inc - t.expense) + ' a month' },
+    { k: 'Cash runway', v: t.expense ? (t.cash / t.expense).toFixed(1) + ' mo' : '—', sub: money(t.cash) + ' vs ' + money(t.expense) + ' a month out' },
+    { k: 'Debt payments', v: pct0(pay), sub: money(pay) + ' a month, of all income' },
+    { k: 'Tax set aside', v: pct0(byCat('Taxes')), sub: money(byCat('Taxes')) + ' a month' },
+    { k: 'Giving', v: pct0(byCat('Giving')), sub: money(byCat('Giving')) + ' a month' }];
+  if (top) m.push({ k: 'Biggest income source', v: pct0(top.v), sub: top.k });
+  if (sba && dist && dist.v) m.push({ k: 'SBA loan vs its business', v: Math.round(sba.payment / dist.v * 100) + '%', sub: money(sba.payment) + ' of ' + money(dist.v) + ' a month' });
+  return m;
+}
+function renderInsights() {
+  if (!PF) return;
+  $('#insMetrics').innerHTML = insightMetrics().map((x) => `<div class="stat-card"><div class="label">${escapeHtml(x.k)}</div><div class="value">${escapeHtml(x.v)}</div><div class="sub">${escapeHtml(x.sub)}</div></div>`).join('');
+  const last = lastOf('insights'), st = $('#insStatus'), run = $('#insRun');
+  const busy = last && (last.status === 'queued' || last.status === 'running') && Date.now() - last.at < 30 * 60 * 1000;
+  run.disabled = !!busy; run.textContent = last && last.status === 'done' ? 'Refresh insights' : 'Get insights';
+  if (!last) { st.textContent = 'Not generated yet.'; $('#insCards').innerHTML = ''; return; }
+  const when = new Date(last.finished_at || last.at).toLocaleString();
+  const stale = last.status === 'done' && last.pf_sig && pfSigNow && last.pf_sig !== pfSigNow;
+  st.textContent = busy ? (last.status === 'queued' ? 'Waiting for the assistant on your computer…' : 'Writing insights — about a minute…') : last.status === 'failed' ? (last.report || 'Failed — try again.') : `Generated ${when}.` + (stale ? ' Your numbers have changed since — refresh.' : '');
+  let cards = []; if (last.status === 'done') { try { cards = JSON.parse(last.report); } catch { cards = []; } }
+  $('#insCards').innerHTML = cards.map((c) => `<div class="ins-card"><div class="ins-top"><span class="tag ${c.priority === 'high' ? 'bad' : c.priority === 'medium' ? 'warn' : 'ok'}">${escapeHtml(c.priority)}</span><span class="tag ok">${escapeHtml(c.area)}</span><b>${escapeHtml(c.title)}</b>${c.impact ? `<span class="imp">${escapeHtml(c.impact)}</span>` : ''}</div><p class="why">${escapeHtml(c.why)}</p>${c.next ? `<p class="next">→ ${escapeHtml(c.next)}</p>` : ''}</div>`).join('');
+}
+function wireInsights() {
+  $('#insRun').addEventListener('click', async () => {
+    $('#insRun').disabled = true;
+    try {
+      const r = await fetch('/api/savings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'insights' }) });
+      if (r.status === 401) { location.href = '/login.html'; return; }
+      if (!r.ok) throw new Error(await r.text().catch(() => 'Could not start'));
+      const d = await r.json(); savJobs = d.jobs || []; pfSigNow = d.pf_sig || pfSigNow;
+      if (d.already) msg('The assistant is already working on something — insights will follow.', false);
+      renderSavings(); renderInsights();
+    } catch (e) { msg(String(e.message || e), true); $('#insRun').disabled = false; }
+  });
+}
+
 /* ---------- savings review ---------- */
 function md(text) {
   // Tiny markdown: headings, bullets, **bold**, `code`, [text](http link). Everything is escaped first, so nothing in the report can inject HTML.
@@ -237,9 +281,10 @@ function md(text) {
   }
   return out + (list ? '</ul>' : '');
 }
-let savJobs = [];
+let savJobs = [], pfSigNow = '';
+const lastOf = (kind) => [...savJobs].reverse().find((j) => (j.kind || 'savings') === kind);
 function renderSavings() {
-  const last = savJobs[savJobs.length - 1], st = $('#savStatus'), run = $('#savRun');
+  const last = lastOf('savings'), st = $('#savStatus'), run = $('#savRun');
   const busy = last && (last.status === 'queued' || last.status === 'running') && Date.now() - last.at < 30 * 60 * 1000;
   run.disabled = !!busy;
   if (!last) { st.textContent = 'No review yet.'; $('#savReport').innerHTML = ''; return; }
@@ -247,24 +292,25 @@ function renderSavings() {
   st.textContent = last.status === 'queued' ? 'Waiting for the assistant relay to pick it up…' : last.status === 'running' ? 'Researching now — this takes several minutes. You can leave this page; the report will be here.' : last.status === 'failed' ? `Failed (${when}).` : `Finished ${when}.`;
   $('#savReport').innerHTML = last.report ? md(last.report) : '';
 }
-async function loadSavings() { try { const r = await fetch('/api/savings'); if (r.ok) { savJobs = (await r.json()).jobs || []; renderSavings(); } } catch { /* shown on the next poll */ } }
+async function loadSavings() { try { const r = await fetch('/api/savings'); if (r.ok) { const d = await r.json(); savJobs = d.jobs || []; pfSigNow = d.pf_sig || ''; renderSavings(); renderInsights(); } } catch { /* shown on the next poll */ } }
 function wireSavings() {
   $('#savRun').addEventListener('click', async () => {
     $('#savRun').disabled = true;
     try {
-      const r = await fetch('/api/savings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ focus: $('#savFocus').value }) });
+      const r = await fetch('/api/savings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'savings', focus: $('#savFocus').value }) });
       if (r.status === 401) { location.href = '/login.html'; return; }
       if (!r.ok) throw new Error(await r.text().catch(() => 'Could not start the review'));
-      savJobs = (await r.json()).jobs || []; renderSavings();
+      { const d = await r.json(); savJobs = d.jobs || []; pfSigNow = d.pf_sig || pfSigNow; } renderSavings(); renderInsights();
     } catch (e) { msg(String(e.message || e), true); $('#savRun').disabled = false; }
   });
-  loadSavings(); setInterval(() => { const l = savJobs[savJobs.length - 1]; if (!document.hidden && l && (l.status === 'queued' || l.status === 'running')) loadSavings(); }, 15000);
+  loadSavings(); setInterval(() => { const l = savJobs[savJobs.length - 1]; if (!document.hidden && l && (l.status === 'queued' || l.status === 'running') && Date.now() - l.at < 30 * 60 * 1000) loadSavings(); }, 15000);
 }
 
 (async function init() {
   wireForms();
   wireChat();
   wireSavings();
+  wireInsights();
   try { PF = await api(); renderAll(); try { spy(); } catch (e) {} }
   catch (e) { $('#pfMsg').textContent = 'Could not load your data: ' + (e.message || e); $('#pfMsg').style.color = 'var(--danger)'; }
 })();

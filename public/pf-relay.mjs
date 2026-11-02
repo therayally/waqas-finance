@@ -94,7 +94,9 @@ function buildPrompt(messageBody, history, files) {
 function runClaude(prompt, cwd, opt = {}) {
   return new Promise((resolve, reject) => {
     // Chat answers get no web access. A savings review gets WebSearch and WebFetch (it has to look things up) and nothing else new.
-    const args = opt.web
+    const args = opt.readOnly
+      ? ['-p', '--output-format', 'text', '--allowedTools', 'Read', '--disallowedTools', 'Edit', 'Write', 'Bash', 'WebFetch', 'WebSearch', 'Task', 'NotebookEdit']
+      : opt.web
       ? ['-p', '--output-format', 'text', '--allowedTools', 'Read', 'WebSearch', 'WebFetch', '--disallowedTools', 'Edit', 'Write', 'Bash', 'Task', 'NotebookEdit']
       : ['-p', '--output-format', 'text', '--add-dir', TOOL_DIR, '--allowedTools', 'Read', 'Write', `Bash(${API_TOOL}:*)`, '--disallowedTools', 'Edit', 'WebFetch', 'WebSearch', 'Task', 'NotebookEdit'];
     const child = spawn(CLAUDE_BIN, args, { cwd, env: { ...process.env, PF_URL: BASE, PF_API_KEY: KEY } });
@@ -131,7 +133,37 @@ For every idea give: what it is, estimated yearly dollar impact as a RANGE with 
     `FORMAT: markdown. Start with a 5-line summary of the biggest opportunities and a total range of possible yearly savings. Then "## Opportunities" (ranked, each as a short ### section), "## Questions for your CPA", "## Assumptions and what I could not verify". Plain language, short sentences, figures not adjectives. Return ONLY the report.`,
   ].filter(Boolean).join('\n\n');
 }
+function insightsPrompt(job) {
+  return [
+    'You write short, sharp financial insights for a busy business owner (Waqas). He reads them in 30 seconds on a dashboard. You are an analyst, not his accountant or a licensed advisor.',
+    `HIS NUMBERS (monthly averages from his dashboard; the only data you have):\n${JSON.stringify(job.data, null, 1)}`,
+    'CONTEXT: Maryland, USA. Income is from "Distribution Business" (which carries the SBA loan) and "Unified Restaurants" (a restaurant group; he also has &Shawarma). Entity types, ownership, payroll and tax filings are unknown.',
+    job.focus ? `HE ASKED YOU TO LOOK AT: ${job.focus}` : '',
+    `Give 6 to 8 insights, BUSINESS FIRST (income concentration, how much of each business's income the debt takes, cash runway, tax load, owner draw vs spending, debt cost), then personal. Work from the numbers: do the arithmetic and use the real figures. You have no web access here, so do not quote current rates or tax limits as fact; where an insight depends on one, say it needs checking and point to the Savings review. If a number you need is missing (a loan balance or rate, entity type), make that its own insight asking for it.`,
+    `Reply with ONLY a JSON array, no markdown fences and no text around it. Each item: {"title": short headline, 8 words max, "why": ONE sentence with the actual numbers, "next": one concrete next step, 12 words max, "area": "business"|"debt"|"cash"|"tax"|"giving"|"spending"|"data", "priority": "high"|"medium"|"low", "impact": optional short yearly-dollar estimate or range, only if the arithmetic supports it}. Order by priority, high first. Plain words, no jargon, no filler.`,
+  ].filter(Boolean).join('\n\n');
+}
+// The model sometimes wraps the array in prose or a fence: take the outermost [...] and make sure it parses as cards.
+function extractCards(text) {
+  const a = text.indexOf('['), b = text.lastIndexOf(']');
+  if (a < 0 || b <= a) throw new Error('no insights came back');
+  const cards = JSON.parse(text.slice(a, b + 1));
+  if (!Array.isArray(cards) || !cards.length) throw new Error('no insights came back');
+  return JSON.stringify(cards.slice(0, 12).map((c) => ({ title: String(c.title || '').slice(0, 120), why: String(c.why || '').slice(0, 400), next: String(c.next || '').slice(0, 160), area: String(c.area || 'business').slice(0, 12), priority: ['high', 'medium', 'low'].includes(c.priority) ? c.priority : 'medium', impact: c.impact ? String(c.impact).slice(0, 80) : '' })));
+}
 async function runJob(job) {
+  if (job.kind === 'insights') {
+    log('Insights started.');
+    try {
+      const out = await runClaude(insightsPrompt(job), TOOL_DIR, { web: false, timeout: 4 * 60 * 1000, readOnly: true });
+      await api('POST', '/api/agent/report', { id: job.id, status: 'done', report: extractCards(out) });
+      log('Insights ready.');
+    } catch (e) {
+      try { await api('POST', '/api/agent/report', { id: job.id, status: 'failed', report: `Couldn't write the insights: ${String(e.message).slice(0, 160)}. Try again.` }); } catch { /* times out on its own */ }
+      log('Insights failed:', e.message);
+    }
+    chatActive = true; return;
+  }
   log('Savings review started (this can take several minutes).');
   try {
     const report = await runClaude(researchPrompt(job), TOOL_DIR, { web: true, timeout: RESEARCH_TIMEOUT_MS });
