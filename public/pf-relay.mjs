@@ -17,6 +17,7 @@
 import { spawn } from 'node:child_process';
 import { writeFileSync, mkdirSync, existsSync, rmSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 
@@ -26,14 +27,14 @@ try { for (const line of readFileSync(path.join(os.homedir(), '.pf-relay', 'env'
 const BASE = (process.env.PF_URL || 'https://waqas-finance.vercel.app').replace(/\/$/, '');
 const KEY = process.env.PF_API_KEY;
 const POLL_MS = Math.max(1, Number(process.env.POLL_SECONDS) || 3) * 1000;
-const IDLE_MS = Math.max(POLL_MS, (Number(process.env.IDLE_POLL_SECONDS) || 60) * 1000);
+const IDLE_MS = Math.max(POLL_MS, (Number(process.env.IDLE_POLL_SECONDS) || 10) * 1000);
 let chatActive = false; // the dashboard says someone has the chat open right now (see api/agent/inbox.js)
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 const TIMEOUT_MS = 3 * 60 * 1000;
 
 if (!KEY) { console.error('Set PF_API_KEY to the relay key (ask the dashboard for it — Admin / Assistant setup).'); process.exit(1); }
 
-const RELAY_VERSION = '2026-11-02-h';
+const RELAY_VERSION = '2026-11-02-j';
 const log = (...a) => console.log(`[${new Date().toLocaleTimeString()}]`, ...a);
 
 async function api(method, route, body) {
@@ -65,7 +66,7 @@ writeFileSync(API_TOOL, `#!/usr/bin/env bash
 set -euo pipefail
 M="\${1:-}"; P="\${2:-}"; F="\${3:-}"
 case "$M" in GET|POST) ;; *) echo "Use GET or POST." >&2; exit 2;; esac
-case "$P" in /api/pf) ;; *) echo "Only /api/pf is allowed." >&2; exit 2;; esac
+case "$P" in /api/pf|/api/ledger) ;; *) echo "Only /api/pf and /api/ledger are allowed." >&2; exit 2;; esac
 args=(-sS -X "$M" -H "Authorization: Bearer $PF_API_KEY" -H "Content-Type: application/json" "$PF_URL$P")
 if [ -n "$F" ]; then
   case "$F" in "$HOME"/.pf-relay/*) ;; *) echo "The body file must be in ~/.pf-relay." >&2; exit 2;; esac
@@ -75,21 +76,104 @@ fi
 exec curl "\${args[@]}"
 `, { mode: 0o700 });
 
-const API_GUIDE = `GET /api/pf returns {cash, income, expenses, liabilities}, each a list of rows: {id, k, v} for cash/income; {id, k, v, cat, note?} for expenses (cat is one of Housing, Personal, Taxes, Giving, Business, Debt, Utilities, Other); {id, k, balance, payment} for liabilities (balance can be null when not known).
-POST /api/pf with a JSON body adds or removes one row:
-  add:    {"action":"add","list":"expenses","item":{"k":"Gym membership","v":80,"cat":"Personal"}}
-  remove: {"action":"remove","list":"expenses","id":"<the row's id>"}
-"list" is one of cash, income, expenses, liabilities. To change a row's amount, remove the old one and add the new one with the same k.`;
+// The persona and training live on the dashboard server (public/assistant/SOUL.md and SKILL.md), so a change there reaches
+// this computer without reinstalling anything: re-read at start and at most every 10 minutes.
+let TRAINING = ''; let trainingAt = 0;
+async function ensureTraining() {
+  if (TRAINING && Date.now() - trainingAt < 10 * 60 * 1000) return;
+  try {
+    const get = async (n) => { const r = await fetch(`${BASE}/assistant/${n}?v=${Date.now()}`, { cache: 'no-store' }); return r.ok ? await r.text() : ''; };
+    const soul = await get('SOUL.md'); const skill = (await get('SKILL.md')).replace(/^---[\s\S]*?---\s*/, '');
+    if (soul && skill && !soul.startsWith('<') && !skill.startsWith('<')) { TRAINING = `${soul.trim()}\n\n${skill.trim()}`; trainingAt = Date.now(); }
+  } catch { /* keep the last good copy */ }
+}
+const TRAINING_FALLBACK = "You are Penny, the friendly finance helper in Waqas' Personal Finance app. Plain words, short sentences. Only talk about his money and the app. Never guess a number you cannot read.";
+
+const API_GUIDE = `THE TWO PLACES YOU READ AND WRITE:
+/api/pf: his dashboard numbers. GET returns {cash, income, expenses, liabilities}; each is a list of rows: {id, k, v} for cash and income (v is a monthly amount for income, a balance for cash); {id, k, v, cat, note?} for expenses (v is the MONTHLY amount; cat is one of Housing, Personal, Taxes, Giving, Business, Debt, Utilities, Other); {id, k, balance, payment} for liabilities (balance may be null when unknown).
+  POST adds or removes one row:  {"action":"add","list":"expenses","item":{"k":"Gym membership","v":80,"cat":"Personal"}}   or   {"action":"remove","list":"expenses","id":"<the row's id>"}   ("list" is cash, income, expenses or liabilities). To change a row, remove the old one and add the new one with the same k.
+/api/ledger: transactions read from documents. GET returns {imports:[{id, account, source, count, first, last}], row_count, linked_banks:[{institution, accounts}], monthly}.
+  POST {"action":"add_rows","account_label":"BOA ····1234","source_file":"statement.pdf","rows":[{"date":"2026-10-03","description":"as printed","amount":42.5}]}  (money OUT positive, money IN negative; answers {import_id, added, skipped})   or   {"action":"remove_import","import_id":"<id>"} to take a whole import back out.`;
+
+function xlsxToCsv(buf) {
+  const eocd = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  if (eocd < 0) return null;
+  const total = buf.readUInt16LE(eocd + 10);
+  let p = buf.readUInt32LE(eocd + 16);
+  const entries = new Map();
+  for (let i = 0; i < total && buf.readUInt32LE(p) === 0x02014b50; i++) {
+    const method = buf.readUInt16LE(p + 10), csize = buf.readUInt32LE(p + 20);
+    const nameLen = buf.readUInt16LE(p + 28), extraLen = buf.readUInt16LE(p + 30), commentLen = buf.readUInt16LE(p + 32);
+    entries.set(buf.toString('utf8', p + 46, p + 46 + nameLen), { method, csize, offset: buf.readUInt32LE(p + 42) });
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  const read = (name) => {
+    const e = entries.get(name); if (!e) return null;
+    const start = e.offset + 30 + buf.readUInt16LE(e.offset + 26) + buf.readUInt16LE(e.offset + 28);
+    const raw = buf.subarray(start, start + e.csize);
+    return (e.method === 8 ? zlib.inflateRawSync(raw) : raw).toString('utf8');
+  };
+  const unxml = (t) => t.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&amp;/g, '&');
+  const attrs = (tag) => Object.fromEntries([...tag.matchAll(/([\w:]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
+  const text = (xml) => [...xml.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map((m) => unxml(m[1])).join('');
+  const wb = read('xl/workbook.xml'), rels = read('xl/_rels/workbook.xml.rels');
+  if (!wb || !rels) return null;
+  const shared = [...(read('xl/sharedStrings.xml') || '').matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/g)].map((m) => text(m[1]));
+  // which cell styles are dates
+  const styles = read('xl/styles.xml') || '';
+  const custom = new Map([...styles.matchAll(/<numFmt\b[^>]*>/g)].map((m) => { const a = attrs(m[0]); return [a.numFmtId, a.formatCode || '']; }));
+  const isDateFmt = (id) => (id >= 14 && id <= 22) || (id >= 27 && id <= 36) || (id >= 45 && id <= 47) || (id >= 50 && id <= 58) || (custom.has(String(id)) && /[dmy]/i.test(custom.get(String(id)).replace(/\[[^\]]*\]|"[^"]*"/g, '')) && !/[#0]/.test(custom.get(String(id)).replace(/\[[^\]]*\]|"[^"]*"/g, '')));
+  const cellXfs = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/.exec(styles)?.[1] || '';
+  const dateStyle = [...cellXfs.matchAll(/<xf\b[^>]*>/g)].map((m) => isDateFmt(Number(attrs(m[0]).numFmtId || 0)));
+  const iso = (serial) => new Date(Math.round((Number(serial) - 25569) * 86400000)).toISOString().slice(0, 10);
+  const colIndex = (ref) => { let n = 0; for (const ch of /^[A-Z]+/.exec(ref)?.[0] || 'A') n = n * 26 + ch.charCodeAt(0) - 64; return n - 1; };
+  const csvCell = (v) => (/[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const target = new Map([...rels.matchAll(/<Relationship\b[^>]*>/g)].map((m) => { const a = attrs(m[0]); return [a.Id, a.Target]; }));
+  const out = [];
+  for (const m of wb.matchAll(/<sheet\b[^>]*>/g)) {
+    const a = attrs(m[0]);
+    let t = target.get(a['r:id']) || ''; t = t.startsWith('/') ? t.slice(1) : `xl/${t}`;
+    const xml = read(t) || '';
+    const lines = [];
+    for (const r of xml.matchAll(/<row\b[^>]*?(?:\/>|>([\s\S]*?)<\/row>)/g)) {
+      const cells = [];
+      for (const c of (r[1] || '').matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+        const ca = attrs(c[1]); const inner = c[2] || '';
+        const v = /<v>([\s\S]*?)<\/v>/.exec(inner)?.[1];
+        let val = '';
+        if (ca.t === 's') val = shared[Number(v)] ?? '';
+        else if (ca.t === 'inlineStr') val = text(inner);
+        else if (ca.t === 'str' || ca.t === 'e') val = v === undefined ? '' : unxml(v);
+        else if (ca.t === 'b') val = v === '1' ? 'TRUE' : 'FALSE';
+        else if (v !== undefined) val = dateStyle[Number(ca.s || 0)] && Number(v) > 0 ? iso(v) : v;
+        cells[colIndex(ca.r || 'A')] = val;
+      }
+      while (cells.length && (cells[cells.length - 1] === undefined || cells[cells.length - 1] === '')) cells.pop();
+      lines.push(Array.from(cells, (x) => csvCell(x ?? '')).join(','));
+    }
+    while (lines.length && lines[lines.length - 1] === '') lines.pop();
+    out.push({ name: unxml(a.name || ''), hidden: (a.state || 'visible') !== 'visible', csv: lines.join('\n') + '\n' });
+  }
+  return out;
+}
+
+// A PDF's page count, read from its own page objects (good for ordinary PDFs; 0 means "could not tell").
+function pdfPageCount(buf) { return (buf.toString('latin1').match(/\/Type\s*\/Page(?![s\w])/g) || []).length; }
 
 function buildPrompt(messageBody, history, files) {
+  const fileLines = files.map((f) => {
+    const head = `- ${f.name}: ${f.path || '(not available)'}${f.error ? ` (could not be downloaded: ${f.error})` : ''}`;
+    if (f.pages) return `${head}\n  THIS PDF HAS ABOUT ${f.pages} PAGE${f.pages === 1 ? '' : 'S'}. Read every page, in ranges of up to 20 pages, and end this file's status line with the true count, for example ${f.pages} of ${f.pages} pages read.`;
+    if (f.sheets) return `${head}\n  THIS WORKBOOK HAS ${f.sheets.length} SHEET${f.sheets.length === 1 ? '' : 'S'}, each already turned into a plain text copy. Read EVERY one in full, including hidden ones, and end this file's status line with the true count, for example ${f.sheets.length} of ${f.sheets.length} sheets read:\n${f.sheets.map((sh, i) => `    ${i + 1}. ${sh.name}${sh.hidden ? ' (hidden)' : ''}: ${sh.path}`).join('\n')}`;
+    return head;
+  }).join('\n');
   return [
-    'You are the chat assistant for Waqas\' Personal Finance dashboard (a simple tracker: income, expenses, cash on hand, liabilities). Talk like a helpful, plain-spoken colleague: short sentences, no jargon, no mention of APIs, JSON, tools or files.',
-    `You read the dashboard and change it by calling its API through this one command: ${API_TOOL} GET /api/pf   or   ${API_TOOL} POST /api/pf <path-to-a-json-file-in-${TOOL_DIR}>. Write the JSON you want to send into a file in ${TOOL_DIR} first, then give that file's path. Never run any other command.`,
+    `=== WHO YOU ARE AND HOW YOU WORK (this overrides any personality you normally have) ===\n${TRAINING || TRAINING_FALLBACK}`,
+    `=== THE ONE COMMAND YOU HAVE IN THIS CHAT ===\n${API_TOOL} GET <path>   or   ${API_TOOL} POST <path> <json file>. Write the JSON you want to send into a file inside ${TOOL_DIR} first, then give that file's path. It already knows the app address and the key. Never run any other command, and never type or reveal the key.`,
     API_GUIDE,
-    `When the message describes money — a receipt, a bill, a bank statement line, "add $80 for the gym", "my mortgage balance is now $410k", "remove the Comcast bill" — read it, call GET /api/pf first if you need to find an existing row's id, then add/remove with POST, and reply in one or two short sentences saying what you did. If it is ambiguous (which row, which list), ask one short question instead of guessing. If it is just a question about the numbers, answer it from GET /api/pf, in plain language with the actual figures.`,
-    history ? `Recent conversation (for context):\n${history}` : '',
-    files.length ? `Waqas attached ${files.length === 1 ? 'a file' : 'files'} (a receipt, bill, statement or photo). Open each one with your Read tool and look at it — images and PDFs are readable directly. Copy what is printed exactly (vendor, date, each amount); never guess a number you cannot read, and say so instead. A receipt or bill means an expense to add; a bank or card statement means list what you found and ask which lines to add rather than adding everything.\n${files.map((f) => `- ${f.name}: ${f.path}${f.error ? ` (could not be downloaded: ${f.error})` : ''}`).join('\n')}` : '',
-    messageBody ? `Waqas just said: ${messageBody}` : 'Waqas sent the file(s) without a message: work out what they are and record them as described, then say what you did.',
+    history ? `=== RECENT CONVERSATION (context only) ===\n${history}\n\nThe earlier messages are only context. Answer ONLY what Waqas says now. Never bring up, repeat, re-offer or redo anything from earlier unless his current message asks about it, and never mention a past request that is not on the dashboard. The dashboard (GET /api/pf) and the ledger are the only truth about what is saved, not what an earlier reply claimed. Do not say hello again: this chat is already open.` : '',
+    files.length ? `=== FILES HE ATTACHED (read them from disk) ===\n${fileLines}\nImages and PDFs are readable directly with your Read tool. Follow your training for receipts, bills, statements, photos, PDFs and spreadsheets, and reply with the status lines it describes unless he typed a different request.` : '',
+    messageBody ? `=== WAQAS SAYS ===\n${messageBody}` : '=== WAQAS SENT THE FILE(S) WITHOUT A MESSAGE ===\nWork out what they are and record them as your training describes, then reply with the status lines.',
   ].filter(Boolean).join('\n\n');
 }
 
@@ -239,10 +323,20 @@ async function tick1() {
   const workDir = path.join(TOOL_DIR, 'incoming', String(inbox.message.id).replace(/[^\w-]/g, ''));
   mkdirSync(workDir, { recursive: true });
   try {
+    await ensureTraining();
     const files = [];
     for (const [i, att] of (inbox.message.attachments || []).entries()) {
-      try { files.push({ name: att.file_name, path: await downloadAttachment(att, workDir, i + 1) }); }
-      catch (e) { files.push({ name: att.file_name, path: '', error: e.message }); }
+      try {
+        const file = { name: att.file_name, path: await downloadAttachment(att, workDir, i + 1) };
+        const bytes = readFileSync(file.path);
+        if (att.content_type === 'application/pdf') { const n = pdfPageCount(bytes); if (n > 0) file.pages = n; }
+        if (/spreadsheetml/.test(att.content_type || '') || /\.xlsx$/i.test(att.file_name || '')) {
+          const sheets = xlsxToCsv(bytes);
+          if (!sheets || !sheets.length) throw new Error('the workbook could not be opened');
+          file.sheets = sheets.map((sh, k) => { const sp = path.join(workDir, `${i + 1}-sheet${k + 1}-${String(sh.name).replace(/[^\w.-]+/g, '_').slice(0, 40)}.csv`); writeFileSync(sp, sh.csv); return { name: sh.name, hidden: sh.hidden, path: sp }; });
+        }
+        files.push(file);
+      } catch (e) { files.push({ name: att.file_name, path: '', error: e.message }); }
     }
     const reply = await runClaude(buildPrompt(inbox.message.body, inbox.history, files), workDir);
     await api('POST', '/api/agent/reply', { id: inbox.message.id, body: reply });
@@ -270,7 +364,7 @@ async function selfUpdate() {
 }
 selfUpdate(); setInterval(selfUpdate, 60 * 60 * 1000);
 
-log(`Watching ${BASE} — every ${POLL_MS / 1000}s while the chat is open on the dashboard, every ${IDLE_MS / 1000}s when nobody is using it. Claude Code only runs when a message arrives. Ctrl-C to stop.`);
+log(`Watching ${BASE} — every ${POLL_MS / 1000}s while the chat is open on the dashboard, every ${IDLE_MS / 1000}s otherwise. Claude Code only runs when a message arrives. Ctrl-C to stop.`);
 (async function loop() {
   try { await tick(); } catch (e) { log('Poll error:', e.message); }
   setTimeout(loop, chatActive ? POLL_MS : IDLE_MS);

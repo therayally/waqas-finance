@@ -6,7 +6,7 @@
 // machine-to-machine endpoint the relay calls from the person's own computer, which has no session cookie.
 // Bearer auth isn't cookie-based, so it isn't CSRF-able the way api/pf.js and api/chat.js are; no CSRF check here.
 import { safeEqual, audit } from '../../lib/security.js';
-import { getChat, setChat, getActive, getJobs, setJobs, getPF, getRelaySeen, setRelaySeen, getBanks, getBankTx } from '../../lib/store.js';
+import { getChat, setChat, getActive, getJobs, setJobs, getPF, getRelaySeen, setRelaySeen, getBanks, getBankTx, getLedger } from '../../lib/store.js';
 import { bankSummary } from '../../lib/bank.js';
 
 export const config = { runtime: 'nodejs' };
@@ -23,7 +23,7 @@ function latestFindings(jobs) {
 
 // Real bank actuals (balances, monthly in/out, recurring costs), only when a bank is linked: never raw transactions.
 async function bankFor() {
-  try { const { items } = await getBanks(); if (!items.length) return null; return bankSummary(items, Object.values((await getBankTx()).tx)); } catch { return null; }
+  try { const { items } = await getBanks(); const txs = [...Object.values((await getBankTx()).tx), ...Object.values((await getLedger()).rows)]; return bankSummary(items, txs); } catch { return null; }
 }
 
 async function core(request) {

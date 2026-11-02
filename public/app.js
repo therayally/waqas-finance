@@ -161,6 +161,10 @@ function fileToBase64(file) {
 function wireChat() {
   $('#chatFab').addEventListener('click', () => setChatOpen(!chatOpen));
   $('#chatClose').addEventListener('click', () => setChatOpen(false));
+  $('#chatClear').addEventListener('click', async () => {
+    if (!chatMessages.length || !confirm('Clear the whole conversation? The dashboard numbers are not affected.')) return;
+    try { const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clear: true }) }); if (r.ok) { chatMessages = []; renderChat(); } } catch { /* try again */ }
+  });
   $('#chatSetupLink').addEventListener('click', () => setChatOpen(false));
   // "Get my setup command": a 10-minute setup code goes into the command; the installer trades it for the key,
   // so the key never appears here (same idea as Chef Nerd's Connect your AI page).
@@ -189,7 +193,7 @@ function wireChat() {
     $('#chatAttachBtn').disabled = true;
     try {
       const data_base64 = await fileToBase64(file);
-      const r = await fetch('/api/chat/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_name: file.name, content_type: file.type, data_base64 }) });
+      const r = await fetch('/api/chat/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_name: file.name, content_type: file.type || ({ csv: 'text/csv', txt: 'text/plain', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })[String(file.name).split('.').pop().toLowerCase()] || '', data_base64 }) });
       if (r.status === 401) { location.href = '/login.html'; return; }
       if (!r.ok) throw new Error(await r.text().catch(() => 'Could not upload'));
       pendingAttachment = await r.json(); renderAttachChip();
@@ -273,10 +277,11 @@ const catName = (c) => String(c || 'OTHER').toLowerCase().replace(/_/g, ' ').rep
 function renderBank(d) {
   const st = $('#bankStatus');
   $('#bankSync').hidden = !(d.items && d.items.length);
-  if (!d.configured) { st.textContent = 'Plaid isn\'t set up yet — open "Connect or manage banks" for the steps.'; $('#bankAccts').innerHTML = ''; $('#bankMonthlyWrap').hidden = true; $('#bankNote').hidden = true; return; }
-  if (!d.items.length) { st.textContent = 'No bank connected yet.'; $('#bankAccts').innerHTML = ''; $('#bankMonthlyWrap').hidden = true; $('#bankNote').hidden = true; return; }
-  const last = Math.max(...d.items.map((i) => i.synced_at || 0));
-  st.textContent = `${d.items.length} bank${d.items.length === 1 ? '' : 's'}, ${d.tx_count} transactions${last ? ', synced ' + new Date(last).toLocaleString() : ''}${d.env === 'sandbox' ? ' — TEST MODE (fake banks)' : ''}.`;
+  if (!d.configured && !(d.monthly || []).length) { st.textContent = 'Plaid isn\'t set up yet — open "Connect or manage banks" for the steps.'; $('#bankAccts').innerHTML = ''; $('#bankMonthlyWrap').hidden = true; $('#bankNote').hidden = true; return; }
+  const stm = d.statements || { rows: 0, files: 0 };
+  if (!d.items.length && !(d.monthly || []).length) { st.textContent = 'No bank connected yet, and no statements read yet. Send a statement or receipt to the assistant and it appears here.'; $('#bankAccts').innerHTML = ''; $('#bankMonthlyWrap').hidden = true; $('#bankNote').hidden = true; return; }
+  const last = d.items.length ? Math.max(...d.items.map((i) => i.synced_at || 0)) : 0;
+  st.textContent = [d.items.length ? `${d.items.length} bank${d.items.length === 1 ? '' : 's'}, ${d.tx_count} transactions${last ? ', synced ' + new Date(last).toLocaleString() : ''}${d.env === 'sandbox' ? ' (TEST MODE, fake banks)' : ''}` : '', stm.rows ? `${stm.rows} rows read from ${stm.files} statement${stm.files === 1 ? '' : 's'}/receipt${stm.files === 1 ? '' : 's'}` : ''].filter(Boolean).join('. ') + '.';
   $('#bankAccts').innerHTML = `<table class="ui-t"><thead><tr><th>Account</th><th class="r">Balance</th></tr></thead><tbody>${d.items.flatMap((i) => (i.accounts || []).map((a) => `<tr><td>${escapeHtml(i.institution?.name || '')} — ${escapeHtml(a.name)}${a.mask ? ' ····' + escapeHtml(a.mask) : ''}</td><td class="r">${a.current == null ? '—' : money(a.current)}</td></tr>`)).join('')}</tbody></table>`;
   const m = [...(d.monthly || [])].reverse();
   $('#bankMonthlyWrap').hidden = !m.length; $('#bankNote').hidden = !m.length;

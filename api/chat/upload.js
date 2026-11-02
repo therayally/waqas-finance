@@ -8,7 +8,7 @@ import { putAttachment } from '../../lib/store.js';
 export const config = { runtime: 'nodejs' };
 
 const MAX_BYTES = 3.5 * 1024 * 1024; // 3.5MB decoded (~4.8MB as base64) — Vercel's Node functions cap request bodies around 4.5-5MB
-const ALLOWED = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'application/pdf']);
+const ALLOWED = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'application/pdf', 'text/csv', 'text/plain', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
 async function core(request) {
@@ -24,7 +24,7 @@ async function core(request) {
   let body; try { body = await request.json(); } catch { return new Response('Bad JSON', { status: 400 }); }
   const fileName = String(body?.file_name || 'file').replace(/[^\w.\- ]+/g, '_').slice(0, 120);
   const contentType = String(body?.content_type || '');
-  if (!ALLOWED.has(contentType)) return new Response('Only images and PDFs are accepted', { status: 400 });
+  if (!ALLOWED.has(contentType)) return new Response('Images, PDFs, CSV and Excel (.xlsx) files are accepted', { status: 400 });
 
   let buffer;
   try { buffer = Buffer.from(String(body?.data_base64 || ''), 'base64'); } catch { return new Response('Bad file data', { status: 400 }); }

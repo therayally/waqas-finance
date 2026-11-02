@@ -134,13 +134,13 @@
 
 <button id="chatFab" class="chat-fab" aria-expanded="false" aria-controls="chatFloat" title="Assistant"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H7l-3 3V4z"/></svg><span id="chatFabDot" class="chat-fab-dot" hidden></span></button>
 <div id="chatFloat" class="chat-float" hidden>
-  <div class="chat-float-head"><span>Assistant</span><button type="button" id="chatClose" class="btn" style="padding:0.25rem 0.5rem">&times;</button></div>
+  <div class="chat-float-head"><span>Assistant</span><span><button type="button" id="chatClear" class="linklike" style="margin-right:0.6rem;font-size:0.75rem">Clear chat</button><button type="button" id="chatClose" class="btn" style="padding:0.25rem 0.5rem">&times;</button></span></div>
   <p class="chat-float-sub"><span id="chatConn">Runs as Claude Code on your own computer.</span> <a href="#connect" id="chatSetupLink">Connect</a></p>
   <div id="chatLog" class="chat-log"></div>
   <div id="chatAttachChip" class="chat-attach-chip" hidden></div>
   <form id="chatForm" class="chat-form">
-    <input type="file" id="chatFile" accept="image/jpeg,image/png,image/webp,image/gif,image/heic,application/pdf" hidden>
-    <button type="button" id="chatAttachBtn" class="btn" title="Attach a receipt, statement or photo (images and PDFs, 3.5MB max)" style="padding:0.55rem 0.7rem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M21.44 11.05 12.25 20.24a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.41l8.49-8.49"/></svg></button>
+    <input type="file" id="chatFile" accept="image/jpeg,image/png,image/webp,image/gif,image/heic,application/pdf,.csv,.txt,.xlsx" hidden>
+    <button type="button" id="chatAttachBtn" class="btn" title="Attach a receipt, statement or photo (images, PDF, CSV or Excel, 3.5MB max)" style="padding:0.55rem 0.7rem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M21.44 11.05 12.25 20.24a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.41l8.49-8.49"/></svg></button>
     <input class="input" id="chatInput" name="body" placeholder="e.g. add $80 gym membership, or attach a receipt" autocomplete="off">
     <button class="btn btn-primary" type="submit">Send</button>
   </form>

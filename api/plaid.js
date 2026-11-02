@@ -6,7 +6,7 @@
 //   disconnect  -> remove one bank at Plaid and delete its stored data
 // Access tokens, the Plaid secret and raw account numbers are never sent to the browser or written to a log.
 import { config as settingsFrom, checkToken, readCookie, sameOrigin, audit } from '../lib/security.js';
-import { getBanks, setBanks, getBankTx, setBankTx } from '../lib/store.js';
+import { getBanks, setBanks, getBankTx, setBankTx, getLedger } from '../lib/store.js';
 import { plaid, plaidConfig } from '../lib/plaid.js';
 import { seal, open } from '../lib/vault.js';
 import { monthlySummary } from '../lib/bank.js';
@@ -47,8 +47,8 @@ async function core(request) {
   const cfg = plaidConfig();
 
   if (request.method === 'GET') {
-    const { items } = await getBanks(); const { tx } = await getBankTx();
-    return json({ configured: cfg.ok, env: cfg.env, redirect_set: !!process.env.PLAID_REDIRECT_URI, items: items.map(publicItem), tx_count: Object.keys(tx).length, monthly: monthlySummary(Object.values(tx)) });
+    const { items } = await getBanks(); const { tx } = await getBankTx(); const { rows, imports } = await getLedger();
+    return json({ configured: cfg.ok, env: cfg.env, redirect_set: !!process.env.PLAID_REDIRECT_URI, items: items.map(publicItem), tx_count: Object.keys(tx).length, statements: { rows: Object.keys(rows).length, files: Object.keys(imports).length }, monthly: monthlySummary([...Object.values(tx), ...Object.values(rows)]) });
   }
   if (request.method !== 'POST') return fail('Method not allowed', 405);
   if (!sameOrigin(request)) { audit('plaid.rejected_cross_site', request); return fail('Forbidden', 403); }
@@ -83,7 +83,7 @@ async function core(request) {
       for (const [id, t] of Object.entries(txs.tx)) if (t.date < cutoff) delete txs.tx[id];
       await setBanks(banks); await setBankTx(txs);
       audit('plaid.synced', request, { banks: banks.items.length });
-      return json({ items: banks.items.map(publicItem), tx_count: Object.keys(txs.tx).length, monthly: monthlySummary(Object.values(txs.tx)) });
+      return json({ items: banks.items.map(publicItem), tx_count: Object.keys(txs.tx).length });
     }
     if (body.action === 'disconnect') {
       const banks = await getBanks(); const item = banks.items.find((i) => i.item_id === body.item_id);
