@@ -4,7 +4,7 @@
 import { config as settingsFrom, checkToken, readCookie, sameOrigin, audit } from '../lib/security.js';
 import { getPF, setPF } from '../lib/store.js';
 
-export const config = { runtime: 'nodejs' };
+export const config = { runtime: 'edge' };
 
 // What the dashboard shows before anyone has added or changed anything.
 const SEED = {
