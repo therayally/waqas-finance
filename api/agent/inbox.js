@@ -14,6 +14,12 @@ const CLAIM_MS = 3 * 60 * 1000;
 const HISTORY = 12;
 const ACTIVE_MS = 60 * 1000; // the chat counts as in use for a minute after its last heartbeat or message
 
+// What a report is written from: the newest finished savings research and insight cards, if any.
+function latestFindings(jobs) {
+  const done = (kind) => [...jobs].reverse().find((j) => (j.kind || 'savings') === kind && j.status === 'done' && j.report);
+  return { savings_report: done('savings')?.report || '', insights: done('insights')?.report || '' };
+}
+
 async function core(request) {
   const key = process.env.AGENT_RELAY_KEY;
   const given = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
@@ -31,7 +37,7 @@ async function core(request) {
     if (job) {
       job.status = 'running'; job.started_at = now;
       try { await setJobs(jobs); } catch { /* worst case it is handed out again */ }
-      return Response.json({ message: null, active, job: { id: job.id, kind: job.kind || 'savings', focus: job.focus || '', data: await getPF(null) } }, { headers: { 'Cache-Control': 'no-store' } });
+      return Response.json({ message: null, active, job: { id: job.id, kind: job.kind || 'savings', focus: job.focus || '', data: await getPF(null), ...(job.kind === 'report' ? latestFindings(jobs) : {}) } }, { headers: { 'Cache-Control': 'no-store' } });
     }
     return Response.json({ message: null, active }, { headers: { 'Cache-Control': 'no-store' } });
   }

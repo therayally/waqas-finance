@@ -33,7 +33,7 @@ const TIMEOUT_MS = 3 * 60 * 1000;
 
 if (!KEY) { console.error('Set PF_API_KEY to the relay key (ask the dashboard for it — Admin / Assistant setup).'); process.exit(1); }
 
-const RELAY_VERSION = '2026-11-02-e';
+const RELAY_VERSION = '2026-11-02-f';
 const log = (...a) => console.log(`[${new Date().toLocaleTimeString()}]`, ...a);
 
 async function api(method, route, body) {
@@ -153,7 +153,48 @@ function extractCards(text) {
   if (!Array.isArray(cards) || !cards.length) throw new Error('no insights came back');
   return JSON.stringify(cards.slice(0, 12).map((c) => ({ title: String(c.title || '').slice(0, 120), why: String(c.why || '').slice(0, 400), next: String(c.next || '').slice(0, 160), area: String(c.area || 'business').slice(0, 12), priority: ['high', 'medium', 'low'].includes(c.priority) ? c.priority : 'medium', impact: c.impact ? String(c.impact).slice(0, 80) : '' })));
 }
+function reportPrompt(job) {
+  const today = new Date().toISOString().slice(0, 10);
+  return [
+    `You write the overview report for Waqas, a busy business owner: one clear action plan he can read in five minutes and hand to his CPA. Today is ${today}. You are an analyst, not his accountant, attorney or a licensed advisor; say so once, in the last line.`,
+    `HIS NUMBERS (monthly averages from his dashboard):\n${JSON.stringify(job.data, null, 1)}`,
+    job.insights ? `INSIGHT CARDS ALREADY WRITTEN (JSON):\n${job.insights}` : 'No insight cards have been generated yet.',
+    job.savings_report ? `THE SAVINGS RESEARCH ALREADY DONE (with web sources; this is where any rate, limit, program or rule must come from):\n${job.savings_report}` : 'No savings research has been run yet: so make no claims about current rates, tax limits or programs, and tell him to run the Savings review for those.',
+    job.focus ? `HE ASKED THE REPORT TO EMPHASISE: ${job.focus}` : '',
+    `Write it from those three sources only. Do not add facts, figures or sources that are not in them; where the research says it could not verify something, keep it marked unverified. Do the arithmetic from his numbers yourself and double-check every comparison ("largest", "more than", "X% of Y") against the list before writing it. You have one snapshot, so never claim a trend.`,
+    `FORMAT: markdown, short sentences, figures not adjectives, under about 900 words, exactly these sections:
+# Financial overview and action plan
+(one line: date and "from monthly averages")
+## Where you stand
+5 or 6 bullets: income, expenses, left over, cash and how many months it covers, debt payments as a share of income, anything that stands out.
+## Do these first
+A numbered list of the 3 to 5 highest-value actions. Each item: what to do in one sentence, **who does it** (you, CPA, lender), the **yearly impact** as a range if the sources support one (otherwise "not yet known"), and the source URL if the research has one.
+## This month
+## This quarter
+## Later
+Short bullet lists of the remaining actions by timing, each with who does it.
+## Bring to your CPA
+The questions from the research and cards, deduplicated, as a checklist.
+## Numbers still needed
+What is missing from the dashboard that would sharpen all of this (loan balances and rates, entity types, payroll and tax filings), most useful first.
+Then one last italic line that this is researched options from the numbers given, not tax or financial advice.
+Return ONLY the report.`,
+  ].filter(Boolean).join('\n\n');
+}
 async function runJob(job) {
+  if (job.kind === 'report') {
+    log('Report started.');
+    try {
+      const out = await runClaude(reportPrompt(job), TOOL_DIR, { web: false, timeout: 6 * 60 * 1000, readOnly: true });
+      if (out.trim().length < 400) throw new Error('the report came back too short');
+      await api('POST', '/api/agent/report', { id: job.id, status: 'done', report: out });
+      log('Report ready.');
+    } catch (e) {
+      try { await api('POST', '/api/agent/report', { id: job.id, status: 'failed', report: `Couldn't write the report: ${String(e.message).slice(0, 160)}. Try again.` }); } catch { /* times out on its own */ }
+      log('Report failed:', e.message);
+    }
+    chatActive = true; return;
+  }
   if (job.kind === 'insights') {
     log('Insights started.');
     try {

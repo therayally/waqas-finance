@@ -267,6 +267,42 @@ function wireInsights() {
   });
 }
 
+/* ---------- overview report ---------- */
+function renderReport() {
+  const last = lastOf('report'), st = $('#repStatus'), run = $('#repRun');
+  const busy = last && (last.status === 'queued' || last.status === 'running') && Date.now() - last.at < 30 * 60 * 1000;
+  run.disabled = !!busy; run.textContent = last && last.status === 'done' ? 'Write it again' : 'Write the report';
+  const done = last && last.status === 'done';
+  $('#repPrint').hidden = !done; $('#repCopy').hidden = !done;
+  if (!last) { st.textContent = 'Not written yet.'; $('#repBody').innerHTML = ''; return; }
+  const when = new Date(last.finished_at || last.at).toLocaleString();
+  const stale = done && last.pf_sig && pfSigNow && last.pf_sig !== pfSigNow;
+  st.textContent = busy ? (last.status === 'queued' ? 'Waiting for the assistant on your computer…' : 'Writing the report — about a minute…') : last.status === 'failed' ? (last.report || 'Failed — try again.') : `Written ${when}.` + (stale ? ' Your numbers have changed since — write it again.' : '');
+  $('#repBody').innerHTML = done ? md(last.report) : '';
+}
+function wireReport() {
+  $('#repRun').addEventListener('click', async () => {
+    $('#repRun').disabled = true;
+    try {
+      const r = await fetch('/api/savings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'report' }) });
+      if (r.status === 401) { location.href = '/login.html'; return; }
+      if (!r.ok) throw new Error(await r.text().catch(() => 'Could not start'));
+      const d = await r.json(); savJobs = d.jobs || []; pfSigNow = d.pf_sig || pfSigNow;
+      if (d.already) msg('The assistant is already working on something — the report will follow.', false);
+      renderSavings(); renderInsights(); renderReport();
+    } catch (e) { msg(String(e.message || e), true); $('#repRun').disabled = false; }
+  });
+  $('#repPrint').addEventListener('click', () => {
+    document.body.classList.add('printing-report');
+    window.addEventListener('afterprint', () => document.body.classList.remove('printing-report'), { once: true });
+    window.print();
+  });
+  $('#repCopy').addEventListener('click', async () => {
+    const last = lastOf('report'); if (!last || !last.report) return;
+    try { await navigator.clipboard.writeText(last.report); $('#repCopy').textContent = 'Copied'; setTimeout(() => { $('#repCopy').textContent = 'Copy text'; }, 2000); } catch { msg('Could not copy — select the text instead.', true); }
+  });
+}
+
 /* ---------- savings review ---------- */
 function md(text) {
   // Tiny markdown: headings, bullets, **bold**, `code`, [text](http link). Everything is escaped first, so nothing in the report can inject HTML.
@@ -292,7 +328,7 @@ function renderSavings() {
   st.textContent = last.status === 'queued' ? 'Waiting for the assistant relay to pick it up…' : last.status === 'running' ? 'Researching now — this takes several minutes. You can leave this page; the report will be here.' : last.status === 'failed' ? `Failed (${when}).` : `Finished ${when}.`;
   $('#savReport').innerHTML = last.report ? md(last.report) : '';
 }
-async function loadSavings() { try { const r = await fetch('/api/savings'); if (r.ok) { const d = await r.json(); savJobs = d.jobs || []; pfSigNow = d.pf_sig || ''; renderSavings(); renderInsights(); } } catch { /* shown on the next poll */ } }
+async function loadSavings() { try { const r = await fetch('/api/savings'); if (r.ok) { const d = await r.json(); savJobs = d.jobs || []; pfSigNow = d.pf_sig || ''; renderSavings(); renderInsights(); renderReport(); } } catch { /* shown on the next poll */ } }
 function wireSavings() {
   $('#savRun').addEventListener('click', async () => {
     $('#savRun').disabled = true;
@@ -311,6 +347,7 @@ function wireSavings() {
   wireChat();
   wireSavings();
   wireInsights();
+  wireReport();
   try { PF = await api(); renderAll(); try { spy(); } catch (e) {} }
   catch (e) { $('#pfMsg').textContent = 'Could not load your data: ' + (e.message || e); $('#pfMsg').style.color = 'var(--danger)'; }
 })();

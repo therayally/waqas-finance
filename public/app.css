@@ -181,6 +181,12 @@ details.more { margin-top: 0.5rem; } details.more > summary { list-style: none; 
 .chat-attach-chip button { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 0.2rem; }
 .chat-cmd { display: block; word-break: break-all; font-size: 0.72rem; background: var(--bg); border: 1px solid var(--border-soft); border-radius: 0.25rem; padding: 0.4rem 0.5rem; user-select: all; }
 .chat-cmd-label { font-size: 0.72rem; color: var(--muted); margin: 0.6rem 0 0.2rem; }
+/* printing the overview report: only the report on the page */
+@media print {
+  body.printing-report .sidebar, body.printing-report .topbar, body.printing-report .mobile-top, body.printing-report .chat-fab, body.printing-report .chat-float, body.printing-report .content > section:not(#report), body.printing-report .content > .note, body.printing-report .sec-head p, body.printing-report #repRun, body.printing-report #repPrint, body.printing-report #repCopy, body.printing-report #repStatus { display: none !important; }
+  body.printing-report .shell { display: block; } body.printing-report .panel { border: none; box-shadow: none; padding: 0; } body.printing-report .content { padding: 0; max-width: none; }
+  body.printing-report .report { max-width: none; font-size: 11pt; color: #000; } body.printing-report .report a { color: #000; text-decoration: none; }
+}
 /* insights */
 .ins-cards { display: grid; gap: 0.7rem; margin-top: 0.9rem; }
 .ins-card { border: 1px solid var(--border-soft); border-radius: 0.375rem; padding: 0.75rem 0.9rem; }

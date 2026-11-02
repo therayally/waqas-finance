@@ -9,7 +9,7 @@ export const config = { runtime: 'nodejs' };
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const KEEP = 12;
-const KINDS = new Set(['savings', 'insights']);
+const KINDS = new Set(['savings', 'insights', 'report']);
 // A short fingerprint of the dashboard numbers, so the Insights tab can say "your numbers changed since this was run".
 async function pfSig() { const d = await getPF(null); if (!d) return ''; const t = JSON.stringify([d.cash, d.income, d.expenses, d.liabilities]); let h = 5381; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0; return String(h >>> 0); }
 const STALE_MS = 30 * 60 * 1000; // a job still "running" after this long is treated as dead, so a new one can start
