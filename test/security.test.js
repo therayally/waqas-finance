@@ -49,6 +49,16 @@ test('sign-in: right name and code get a hardened cookie; wrong ones do not; the
   assert.ok(q.logs.every((l) => !l.includes('2015') && !l.includes('2016') && !l.includes(SECRET)), 'no code or secret in the log');
 });
 
+test('a second account (OWNER2_*) signs in too; a name from one account with the password of the other does not', async () => {
+  const env2 = { ...ENV, OWNER2_USER: 'Second', OWNER2_PASS: 'abc-9876' };
+  const q = quiet();
+  const a = await login(post({ username: 'second', password: 'abc-9876' }), env2);
+  const b = await login(post({ username: 'Waqas', password: '2015' }), env2);
+  const mixed = await login(post({ username: 'Waqas', password: 'abc-9876' }), env2);
+  q.done();
+  assert.equal(a.headers.get('location'), '/'); assert.equal(b.headers.get('location'), '/'); assert.match(mixed.headers.get('location'), /e=1/);
+});
+
 test('brute force: five wrong codes lock that address out, and the right code is refused while locked', async () => {
   const q = quiet(); const h = { origin: 'https://site.test', 'x-real-ip': '203.0.113.9' };
   for (let i = 0; i < 5; i++) await login(post({ username: 'Waqas', password: String(1000 + i) }, h), ENV);

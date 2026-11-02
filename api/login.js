@@ -21,9 +21,14 @@ export async function signIn(request, env) {
   const form = await request.formData().catch(() => null);
   const user = String(form?.get('username') || '').trim().slice(0, 64);
   const pass = String(form?.get('password') || '').slice(0, 64);
-  const okUser = await safeEqual(user.toLowerCase(), settings.user.toLowerCase());
-  const okPass = await safeEqual(pass, settings.pass);
-  if (!(okUser && okPass)) {
+  // Every account is checked in full (no early exit), so timing doesn't reveal which name exists.
+  let matched = false;
+  for (const u of settings.users) {
+    const okUser = await safeEqual(user.toLowerCase(), u.user.toLowerCase());
+    const okPass = await safeEqual(pass, u.pass);
+    if (okUser && okPass) matched = true;
+  }
+  if (!matched) {
     limit.fail(ip); audit('login.failed', request);
     await wait(1000 + Math.floor(Math.random() * 500)); // slows guessing and evens out timing
     return back(request, limit.blocked(ip) ? 2 : 1);
