@@ -1,13 +1,16 @@
 // GET returns the current personal-finance data (seeding it on first run); POST applies one add/edit/remove
-// action and returns the updated data. Both need a valid owner session (same gate as the rest of the app) and
-// POST also needs a same-site request (CSRF guard), same pattern as api/login.js.
+// action and returns the updated data. Either the owner's browser session (cookie) or the relay's key
+// (Authorization: Bearer AGENT_RELAY_KEY — Claude Code, via public/pf-relay.mjs, calls it this way, with no
+// cookie of its own) counts as authenticated. A cookie-authenticated POST also needs a same-site request (CSRF
+// guard, same pattern as api/login.js); a key-authenticated one doesn't, since CSRF exploits ambient cookies a
+// browser attaches automatically — a bearer token the relay sends on purpose isn't forgeable that way.
 //
 // This runs on the Node.js runtime, not edge: @vercel/blob (lib/store.js) needs Node stream/undici internals
 // that the edge sandbox doesn't have. Everything else here — the session check, CSRF guard, audit log — is the
 // same Fetch-API code the rest of the app uses on edge, so `core()` below still takes a Web Request and returns
 // a Web Response; `handler()` just adapts Node's (req, res) to and from that, so the security logic itself,
 // which is what actually needs to stay correct, is never duplicated or rewritten.
-import { config as settingsFrom, checkToken, readCookie, sameOrigin, audit } from '../lib/security.js';
+import { config as settingsFrom, checkToken, readCookie, sameOrigin, safeEqual, audit } from '../lib/security.js';
 import { getPF, setPF } from '../lib/store.js';
 
 export const config = { runtime: 'nodejs' };
@@ -63,10 +66,21 @@ function applyAction(data, body) {
   return data;
 }
 
+async function viaRelayKey(request) {
+  const key = process.env.AGENT_RELAY_KEY;
+  const given = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  return !!(key && key.length >= 20 && given && (await safeEqual(given, key)));
+}
+
 async function core(request) {
-  const s = settingsFrom();
-  const session = s.ok ? await checkToken(s.secret, readCookie(request)) : { ok: false };
-  if (!session.ok) return new Response('Unauthorized', { status: 401, headers: { 'Cache-Control': 'no-store' } });
+  const relayAuthed = await viaRelayKey(request);
+  let cookieAuthed = false;
+  if (!relayAuthed) {
+    const s = settingsFrom();
+    const session = s.ok ? await checkToken(s.secret, readCookie(request)) : { ok: false };
+    if (!session.ok) return new Response('Unauthorized', { status: 401, headers: { 'Cache-Control': 'no-store' } });
+    cookieAuthed = true;
+  }
 
   if (request.method === 'GET') {
     const data = await getPF(SEED);
@@ -74,7 +88,7 @@ async function core(request) {
   }
 
   if (request.method === 'POST') {
-    if (!sameOrigin(request)) { audit('pf.rejected_cross_site', request); return new Response('Forbidden', { status: 403 }); }
+    if (cookieAuthed && !sameOrigin(request)) { audit('pf.rejected_cross_site', request); return new Response('Forbidden', { status: 403 }); }
     const len = Number(request.headers.get('content-length') || 0); if (len > 8192) return new Response('Payload too large', { status: 413 });
     let body; try { body = await request.json(); } catch { return new Response('Bad JSON', { status: 400 }); }
     const data = await getPF(SEED);

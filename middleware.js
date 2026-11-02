@@ -1,11 +1,12 @@
 // Every page and file except the sign-in screen, its script, the stylesheet, the font, robots.txt, the
-// downloadable relay script and the relay's own API (which has its own key-based auth, not a session) needs a
-// valid owner session. Each allowed request slides the 30-minute idle window forward; the 8-hour absolute limit
-// never moves (NIST 800-63B 7.2).
+// downloadable relay script and the relay-reachable APIs (api/agent/* and api/pf, which accept the relay's own
+// key as well as a session — see api/pf.js — so a key-only request must not be redirected to login.html here
+// before it ever reaches them) needs a valid owner session. Each allowed request slides the 30-minute idle
+// window forward; the 8-hour absolute limit never moves (NIST 800-63B 7.2).
 import { next } from '@vercel/functions';
 import { config as settingsFrom, checkToken, makeToken, readCookie, cookie, audit } from './lib/security.js';
 
-export const config = { matcher: ['/((?!login\\.html|login\\.js|app\\.css|fonts/|robots\\.txt|pf-relay\\.mjs|api/login|api/logout|api/agent/).*)'] };
+export const config = { matcher: ['/((?!login\\.html|login\\.js|app\\.css|fonts/|robots\\.txt|pf-relay\\.mjs|api/login|api/logout|api/agent/|api/pf$).*)'] };
 
 export default async function middleware(request) {
   const s = settingsFrom();
