@@ -226,7 +226,7 @@ async function pollChatForReply() {
 /* ---------- savings review ---------- */
 function md(text) {
   // Tiny markdown: headings, bullets, **bold**, `code`, [text](http link). Everything is escaped first, so nothing in the report can inject HTML.
-  const inline = (t) => escapeHtml(t).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  const inline = (t) => escapeHtml(t).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>').replace(/(^|[\s(])(https?:\/\/[^\s<)]+?)([.,;:]?)(?=$|[\s<)])/g, '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>$3');
   let out = '', list = false;
   for (const raw of String(text).split('\n')) {
     const line = raw.trimEnd(); const li = /^\s*[-*]\s+(.*)$/.exec(line);
