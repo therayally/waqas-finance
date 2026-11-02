@@ -1,113 +1,16 @@
-// Waqas' Finance Growth Strategy: the dashboard. Served only to a signed-in owner (middleware.js); the data below never reaches the sign-in page.
+// Waqas' Personal Finance tracker. Served only to a signed-in owner (middleware.js); the data below never reaches the sign-in page.
 (function () {
 const $ = (s) => document.querySelector(s);
-const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
-  sget(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }, sset(k, v) { try { sessionStorage.setItem(k, v); } catch (e) {} }, sdel(k) { try { sessionStorage.removeItem(k); } catch (e) {} } };
+const pct = (a, b) => a / b * 100, f1 = (v) => v.toFixed(1), money = (v) => '$' + Math.round(v).toLocaleString('en-US');
+const ICO = { up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg>', alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>', ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' };
 
-const P={aug:{sales:151283.08,food:49894.03,labor:47851.74,rent:10187.32,app:9184.75,cc:3352.89,util:3721.39,mkt:1626.01,net:25124.35},
-         sep:{sales:147583.8,food:60758.37,labor:52028.46,rent:10626.37,app:9163.9,cc:3562.47,util:3114.95,mkt:2444.54,net:3004.09}};
-const months=['24-12','25-01','25-02','25-03','25-04','25-05','25-06','25-07','25-08','25-09','25-10','25-11','25-12','26-01','26-02','26-03','26-04','26-05','26-06','26-07','26-08','26-09','26-10'];
-const chick=[1.84,1.62,1.62,1.92,2.40,2.80,2.79,2.42,2.25,2.16,1.71,1.45,1.46,1.61,1.74,1.99,2.17,2.27,2.29,1.92,1.72,1.79,1.94];
-const beef=[5.42,5.78,6.36,6.21,6.70,7.07,7.87,8.02,7.63,7.73,6.77,6.46,5.97,6.14,6.61,7.78,8.18,8.95,8.62,7.03,6.44,7.30,7.37];
-const pct=(a,b)=>a/b*100, f1=v=>v.toFixed(1), money=v=>'$'+Math.round(v).toLocaleString('en-US');
-
-const leaks=[
- {p:1,t:'Overtime paid in cash at straight time',ev:'141–215 OT hours per two-week period (Aug–Oct payroll tabs). Only 80 hours go on the check; the rest is "OT Cash" at the base rate. Azmeer logs 120 hours per period.',fix:'All hours on payroll; 1.5x over 40 per workweek; cut hours by scheduling.',v:'Legal risk',sub:'≈$3k/mo unpaid premium'},
- {p:1,t:'September food cost jumped to 41%',ev:'New vendor Alshami Food billed $11,236; Int. Golden Foods $2,784; AlSham Bakery +$2.9k.',fix:'Find out what the Alshami bill was for. If it belongs to another store, rebill it.',v:'$3–6k',sub:'per month'},
- {p:1,t:'October P&L is a copy of August',ev:'Gross $152,029 and "08/1 to 08/31" in the October file; only $20,399 of invoices. Shows a fake $77k profit.',fix:'Rebuild October from Square and invoices before any distribution.',v:'Stop',sub:'no payout from it'},
- {p:2,t:'Delivery apps take 30%',ev:'$9.2k a month in fees and app ads on about $31k of app sales.',fix:'Raise app prices 12–15%, cut paid promotions in half, move regulars to direct ordering.',v:'$3–4.5k',sub:'per month'},
- {p:2,t:'Too many labor hours',ev:'1,000–1,080 hours per two weeks; about $70–75 of sales per labor hour.',fix:'Schedule from Square hourly sales at $85+ per labor hour; 2 part-timers for the peaks.',v:'$3–5k',sub:'gross, per month'},
- {p:2,t:'Owners drew more than profit',ev:'Sept: Waqas withdrew $15,141 against a $2,253 share of profit (−$12,888).',fix:'Fixed monthly draw; quarterly distributions from closed months only.',v:'Cash',sub:'protects 2 months of runway'},
- {p:2,t:'Qun runs on &Shawarma’s cash',ev:'Pays Qun payroll tax and Mamu’s pay; sauces at ingredient cost; $15,945 (Jul–Sep) + $14,448 (Apr–Jun) receivable.',fix:'Monthly intercompany invoice at cost + labor + 15%, paid within 15 days.',v:'$0.5–1.5k',sub:'+ about $30k cash back'},
- {p:3,t:'Personal costs inside cost of goods',ev:'Toyota $1,694, Apple/T-Mobile about $460, "Medical Lynchburg", Misc $760–818 a month.',fix:'Separate cards; owner items go to draws. Insurance shows $0: confirm workers’ comp and general liability.',v:'$1–3k',sub:'misclassified'},
- {p:3,t:'Card processing above market',ev:'2.67–2.92% effective on about $124k of card sales.',fix:'Ask Square for a custom rate with a Helcim quote in hand.',v:'$400–900',sub:'per month'},
- {p:3,t:'Software overlap',ev:'PopMenu $815–1,131 + Tossdown + Square.',fix:'One ordering and marketing stack; Square Loyalty + Square Online.',v:'$300–900',sub:'per month'}];
-const recipes=[
- {tag:'P1 · LABOR',t:'Fix payroll and cut overtime',y:'Legal + $2–4k/mo net',time:'2–4 weeks',ing:['Square Payroll or Gusto','7shifts free plan (up to 15 staff)','Square hourly sales report','Payroll accountant (1 meeting)'],
-  steps:['Export every timesheet for the last 2 pay periods.','Put every employee on payroll with W-4 and I-9; stop cash wages.','Pay 1.5x for hours over 40 in each workweek (not per 80-hour period).','Pull Square sales by hour for 4 weeks; staff to $85+ sales per labor hour.','Hire 2 part-timers (20–25 hrs) for 11:30–2 and 5–8 rushes; cap anyone at 40 hrs unless the GM approves.','Every Monday: labor % and OT hours on this dashboard; target labor under 28%.'],
-  warn:'Federal law requires 1.5x overtime and payroll records even for cash pay. Maryland can award up to 3x unpaid wages. Ask a payroll accountant how to handle past periods.'},
- {tag:'P2 · DELIVERY',t:'Cut delivery-app fees from 30% to under 20%',y:'$3–4.5k/mo',time:'1 week',ing:['DoorDash, Uber Eats, Grubhub merchant portals','Square Online or DoorDash Storefront','Bag insert cards with a QR code'],
-  steps:['Raise app menu prices 12–15% above in-store (today the DoorDash bowl is already about $16 vs $12.99 in store).','Turn off paid in-app promotions that don’t bring new customers; keep a $X-off-first-order only if it pays back.','Review each app’s plan tier (DoorDash Basic 15% / Plus 25% / Premier 30%; Uber Eats Lite is now 20%).','Set up commission-free direct ordering with Uber Direct or DoorDash Drive delivery; the customer pays the delivery fee.','Put a "Order direct, get free fries" card in every app bag.','Track app fees ÷ app sales every month.']},
- {tag:'P2 · SOURCING',t:'Rebid halal meat, bread and produce',y:'$2.5–5k/mo',time:'30 days',ing:['Bid sheet with exact specs','4 vendors per category','Halal certificates (HMS, IFANCA, ISA)','MarginEdge or MarketMan for invoice tracking'],
-  steps:['Write specs: e.g. boneless skinless halal thigh, 40 lb case, hand-slaughtered zabiha, certifier named.','Send the same sheet to Spectrum, PFS (West Creek/Silver Source halal), Sysco/Perdue halal and Quality Ethnic Foods.','Beef: ask Washington Lamb and Quality Ethnic to quote knuckle or bottom round, plus a beef-lamb blend; test halal cones at one store.','Bread: get AlSham’s price per piece vs Kontos pita at about $0.32–0.34; keep saj local.','Produce: weekly price sheets from Keany and Coastal Sunbelt; buy onions, potatoes, tomatoes by the case at Jessup.','Lock chicken for 3–6 months near $1.70/lb. Join a free buying group (Dining Alliance or Consolidated Concepts).'],
-  warn:'Never trade halal integrity for price: collect each certificate and check Restaurant Depot case labels every delivery.'},
- {tag:'P3 · PAYMENTS',t:'Card setup and processing',y:'$700–1,200/mo',time:'2 weeks',ing:['Capital One Spark Cash Plus (2% everything)','Chase Ink Business Cash (5% phone, internet)','Helcim quote for leverage'],
-  steps:['Apply for Spark Cash Plus; its $2,000 bonus needs $30k in 3 months, which supplier spend covers.','Put Sysco, PFS, Restaurant Depot, Webstaurant, Sam’s, Facebook and PopMenu on it.','Put Comcast and phones on Ink Business Cash for 5%.','Skip the Amex Business Platinum unless the owners travel a lot: $895 fee, 1x on most supply purchases.','Don’t pay check-only vendors through Melio or Plastiq: about 2.9% fee beats 2% back.','Call Square sales: over $250k a year qualifies for custom rates; show the Helcim quote.']},
- {tag:'GROWTH · CATERING',t:'Build a catering line worth $15–25k a month',y:'+$4.5–7.5k profit/mo',time:'90 days',ing:['Catering menu: boxed bowls, 10/25-person bars, iftar plates','ezCater listing rebuild','Part-time catering & sales manager (base + 5%)','Maryland Small Business Reserve registration on eMMA'],
-  steps:['Price it: boxed bowl $13.99 (10 minimum), 10-person bar $165–189, 25-person about $399, iftar $12–15/head at 100+.','Rebuild ezCater with pro photos and packages; keep on-time above 98%.','Drop sample trays at science-corridor offices, USG, Adventist Shady Grove, biotechs.','Visit the Islamic Center of Maryland (5 miles), MCC and university MSAs with a Ramadan 2027 iftar offer by January.','Register for Small Business Reserve and bid on agency and university catering.','Holiday office-party offer now through December.']},
- {tag:'GROWTH · VIDEO',t:'Staff videos and customer testimonials',y:'Demand engine, about $4.5k/mo budget',time:'Start this week',ing:['One Content Lead (+$2/hr)','Phone, clip-on mic, ring light','Signed release forms','Square Loyalty + Square Marketing'],
-  steps:['5 posts a week: spit carving, sauce pours, halal sourcing, staff faces, first bites.','Staff: $25 per approved video + filming time, through payroll; bonus $25 at 10k views, $100 at 100k.','Customers: free wrap or fries for an honest 15–30 sec video, whatever they say; release signed first.','Post with "#ad – customer got a free item"; staff say "I work here" on their own accounts.','Google reviews: QR code on tables and bags, no reward, ask everyone; reply to every review within 48 hours.','Never reward Google or Yelp reviews, and never ask on Yelp.'],
-  warn:'FTC rules ban rewards tied to positive reviews (up to about $53k per violation). Maryland requires everyone’s consent to record audio.'},
- {tag:'P2 · STRUCTURE',t:'Separate the companies',y:'About $30k cash back + cleaner books',time:'60–90 days',ing:['CPA + business attorney','Separate bank accounts, EINs, Square accounts','Monthly intercompany invoice template'],
-  steps:['Holding LLC owns brands and recipes; one LLC per store; one shared commissary and purchasing LLC.','Commissary sells garlic sauce, hummus, harissa, shug and spice blends at cost + labor + 15%.','Each store pays its own payroll and payroll tax.','Invoice Qun Shawarma monthly; collect the open Apr–Sep balances.','Fixed owner draws; quarterly distributions from closed months only.','Confirm workers’ comp, general liability and licenses for each entity.']},
- {tag:'P2 · WASTE',t:'Daily waste log',y:'1–3 food-cost points',time:'Start tonight',ing:['Kitchen scale','Clipboard or Google Form','Reason codes'],
-  steps:['At close, weigh leftover chicken and beef cones and log pounds.','Log every throwaway with a reason: overcooked, dropped, expired, comp, prep error.','Every Monday compare meat bought vs Square item sales × portion ÷ (1 − 35% loss).','Any gap over 5% gets a cause and an owner.','Cook cones to the hourly sales forecast; smaller cones on slow nights.','Filter fryer oil daily and change it on a tester reading, not the calendar.']}];
-const prep=[
- ['Days 1–30','Stop the leaks',['Close September; confirm the $11,236 Alshami Food bill','Rebuild October from real data','All hours on payroll at 1.5x over 40/week','Schedule from Square hourly sales; post 2 part-time jobs','Raise app prices 12–15%; halve app promotions','Square custom-rate call with Helcim quote','Apply for Spark Cash Plus + Ink Business Cash','Start the daily waste log','Launch holiday office-party catering']],
- ['Days 31–60','Buy better',['3 bids each: chicken, beef, bread, produce','Collect halal certificates','Lock chicken price for 3–6 months','Join a free buying group','Invoice Qun monthly; collect the open balance','One ordering/marketing tool; launch Square Loyalty','Start staff video + testimonial programs','QR review cards on every table and bag','Register for Small Business Reserve; rebuild ezCater']],
- ['Days 61–90','Build the machine',['Form holding, store and commissary LLCs','Separate bank accounts and cards','Hire part-time catering & sales manager','Sell Ramadan 2027 iftar packages','Set fixed owner draws + quarterly distributions','Monthly review: prime cost, labor, apps, catering, reviews']]];
-
-// What is behind each plan step, role and calendar entry: why it matters, what you need, how to do it, how long, and which playbook goes with it (index into `recipes`: 0 labor, 1 delivery apps, 2 sourcing, 3 payments, 4 catering, 5 video, 6 structure, 7 waste).
-const prepInfo = {
- '0-0': { why: 'September food cost jumped to 41% of sales, and a new vendor bill of $11,236 (Alshami Food) is a big part of it. Until you know what it was, the month cannot be closed.', need: ['The Alshami Food invoice and statement', 'September invoices', 'Your Square sales for the month'], steps: ['Get the invoice and read every line.', 'Decide whose it is: &Shawarma, Qun or another store.', 'If it is not &Shawarma, rebill it to the right company on an intercompany invoice.', 'Close September only after that is settled.'], time: 'This week', play: 6 },
- '0-1': { why: 'The October file is a copy of August (same sales, only $20,399 of invoices) and shows a fake $77k profit. Nobody should be paid from it.', need: ['Square daily sales for October', 'October invoices', 'The October P&L workbook'], steps: ['Export Square daily sales from October 1 to today.', 'Enter every October invoice.', 'Rebuild the October P&L tab from those two sources.', 'Hold any owner distribution until it is done.'], time: '1 to 2 days' },
- '0-2': { why: 'Overtime is being paid in cash at the base rate: 141 to 215 overtime hours per pay period. Federal law needs 1.5x over 40 hours in a workweek, and cash pay still needs records. This is a legal risk, worth about $3k a month in unpaid premium.', need: ['Square Payroll or Gusto', 'The last two pay periods of timesheets', 'A payroll accountant (one meeting)'], steps: ['Export every timesheet for the last two pay periods.', 'Put every employee on payroll with a W-4 and I-9; stop cash wages.', 'Pay 1.5x for hours over 40 in each workweek (not per 80-hour period).', 'Ask the accountant how to handle past periods.'], time: '2 to 4 weeks', play: 0 },
- '0-3': { why: 'Labor runs 1,000 to 1,080 hours per two weeks, about $70 to $75 of sales per labor hour. Scheduling to the real rushes is worth $3 to 5k a month.', need: ['Square hourly sales report', '7shifts free plan (up to 15 staff)', 'Two part-time hires'], steps: ['Pull four weeks of Square sales by hour.', 'Staff to $85 or more of sales per labor hour.', 'Post two part-time jobs (20 to 25 hours) for 11:30 to 2 and 5 to 8.', 'Cap anyone at 40 hours unless the GM approves.'], time: '2 to 4 weeks', play: 0 },
- '0-4': { why: 'Delivery apps take about 30% and cost $9.2k a month in fees and app ads. Higher app prices and fewer promotions are worth $3 to 4.5k a month.', need: ['DoorDash, Uber Eats and Grubhub merchant portals', 'Bag insert cards with a QR code'], steps: ['Raise app menu prices 12 to 15% above in-store.', 'Turn off paid promotions that do not bring new customers.', 'Check each app\'s plan tier.', 'Put an order-direct card in every app bag.'], time: '1 week', play: 1 },
- '0-5': { why: 'Card processing runs 2.67 to 2.92% on about $124k of card sales. A custom rate is worth $400 to 900 a month.', need: ['Your Square statement', 'A Helcim quote'], steps: ['Work out your effective rate: fees divided by card sales.', 'Get a Helcim quote.', 'Call Square sales and ask for a custom rate (over $250k a year qualifies).'], time: '1 week', play: 3 },
- '0-6': { why: 'Supplier spend can earn 2% back on one card and 5% on phone and internet on another, instead of earning nothing.', need: ['Business credit checks', 'Your supplier list'], steps: ['Apply for Capital One Spark Cash Plus; its $2,000 bonus needs $30k in three months, which supplier spend covers.', 'Apply for Chase Ink Business Cash for Comcast and phones.', 'Put Sysco, PFS, Restaurant Depot, Webstaurant and Sam\'s on the 2% card.', 'Do not pay check-only vendors through Melio or Plastiq (about 2.9% fee).'], time: '2 weeks', play: 3 },
- '0-7': { why: 'Waste is the easiest food cost to cut and the one nobody measures. One to three food-cost points are usually in it.', need: ['A kitchen scale', 'A clipboard or Google Form', 'Reason codes'], steps: ['At close, weigh leftover chicken and beef cones and log the pounds.', 'Log every throwaway with a reason: overcooked, dropped, expired, comp, prep error.', 'Every Monday compare meat bought with Square sales times portion divided by (1 minus 35% loss).', 'Any gap over 5% gets a cause and an owner.'], time: 'Start tonight', play: 7 },
- '0-8': { why: 'Office holiday parties are booked in the next eight weeks. It is the quickest way to start the catering line.', need: ['A boxed-bowl and bar menu with prices', 'Sample trays', 'Flyers or an email list'], steps: ['Price it: boxed bowl $13.99 (10 minimum), 10-person bar $165 to 189, 25-person about $399.', 'Drop sample trays at science-corridor offices and Adventist Shady Grove.', 'Send the offer to every past catering customer.'], time: 'Now through December', play: 4 },
- '1-0': { why: 'Meat, bread and produce are most of your food bill, and beef swung 39% this year. Three bids each show what is fair.', need: ['A bid sheet with exact specs', 'Four vendors per category', 'MarginEdge or MarketMan for invoice tracking'], steps: ['Write the specs: for example boneless skinless halal thigh, 40 lb case, hand-slaughtered, certifier named.', 'Send the same sheet to Spectrum, PFS, Sysco/Perdue halal and Quality Ethnic Foods.', 'Ask Washington Lamb and Quality Ethnic about knuckle or bottom round and a beef-lamb blend.', 'Compare AlSham\'s bread price per piece with Kontos pita at about $0.32 to 0.34.'], time: '30 days', play: 2 },
- '1-1': { why: 'Halal integrity is not for sale. Every vendor needs a current certificate before you move volume to them.', need: ['A certificate from each vendor', 'A folder (paper or digital)'], steps: ['Ask each vendor for its halal certificate (HMS, IFANCA or ISA).', 'Check the certifier is named and the date is current.', 'Check Restaurant Depot case labels on every delivery.'], time: '1 week', play: 2 },
- '1-2': { why: 'Chicken is near its two-year average, about $1.79 a pound. Locking it protects you if it swings the way beef did.', need: ['Your best chicken quote', 'A written price hold'], steps: ['Ask your best-priced vendor to hold the price for 3 to 6 months near $1.70 a pound.', 'Get it in writing.', 'Check the invoices to confirm the price holds.'], time: '1 to 2 weeks', play: 2 },
- '1-3': { why: 'A free buying group gets you group prices without a contract.', need: ['An account with Dining Alliance or Consolidated Concepts'], steps: ['Sign up for a free group.', 'Compare their prices with your bids.', 'Move the categories where they win.'], time: '1 week', play: 2 },
- '1-4': { why: 'Qun runs on &Shawarma\'s cash: payroll tax, Mamu\'s pay and sauces at ingredient cost, with $15,945 (Jul to Sep) and $14,448 (Apr to Jun) still owed.', need: ['An intercompany invoice template', 'Open balances by month'], steps: ['Invoice Qun every month at cost + labor + 15%.', 'Ask for payment within 15 days.', 'Collect the open April to September balances.'], time: 'Monthly', play: 6 },
- '1-5': { why: 'PopMenu ($815 to 1,131) plus Tossdown plus Square overlap. One stack costs $300 to 900 a month less.', need: ['Your last three months of statements'], steps: ['List every ordering and marketing tool.', 'Keep one: Square Loyalty and Square Online are already paid for.', 'Cancel the rest and ask for annual pricing on what stays.'], time: '1 week' },
- '1-6': { why: 'Videos and testimonials are the demand engine, at about $4.5k a month of budget.', need: ['One Content Lead (+$2 an hour)', 'A phone, clip-on mic and ring light', 'Signed release forms'], steps: ['Post five times a week: spit carving, sauce pours, halal sourcing, staff faces, first bites.', 'Pay staff $25 per approved video, a bonus of $25 at 10k views and $100 at 100k.', 'Give customers a free wrap or fries for an honest 15 to 30 second video, with a signed release.', 'Post with "#ad – customer got a free item".'], time: 'Start this week', play: 5 },
- '1-7': { why: 'Reviews bring new customers for free. Ask everyone, reward no one.', need: ['QR code cards for tables and bags'], steps: ['Print a Google review QR code on every table and bag.', 'Ask every guest; never reward a Google or Yelp review.', 'Reply to every review within 48 hours.'], time: '1 week', play: 5 },
- '1-8': { why: 'State and university catering is large and steady. Registering is free and ezCater is already a channel.', need: ['An eMMA account', 'Professional photos', 'Packages and prices'], steps: ['Register for the Maryland Small Business Reserve on eMMA.', 'Rebuild the ezCater listing with photos and packages.', 'Keep on-time delivery above 98%.'], time: '2 to 3 weeks', play: 4 },
- '2-0': { why: 'One company for everything puts every store at risk together, and makes the books hard to read.', need: ['A CPA and a business attorney', 'EINs for each company'], steps: ['Form a holding LLC for brands and recipes.', 'Form one LLC per store.', 'Form one shared commissary and purchasing LLC.', 'Confirm licenses, workers\' comp and general liability for each.'], time: '60 to 90 days', play: 6 },
- '2-1': { why: 'Mixed accounts hide where money goes. Personal items inside cost of goods (Toyota $1,694, phone and Apple about $460) hide $1 to 3k a month.', need: ['A bank account, EIN and Square account per company', 'A card for each company'], steps: ['Open separate accounts and cards for each company.', 'Move owner items out of cost of goods into draws.', 'Confirm workers\' comp and general liability show on the books.'], time: '2 to 4 weeks', play: 6 },
- '2-2': { why: 'Catering needs one person whose job it is. It can reach $15k to 25k a month.', need: ['A part-time hire, base + 5%', 'A catering price list'], steps: ['Write the role: ezCater, offices, mosques, universities and state bids.', 'Set base pay plus 5% of catering sales.', 'Give them the target: $15k to 25k a month in 12 months.'], time: '30 days', play: 4 },
- '2-3': { why: 'Ramadan 2027 starts around February 8. Mosques and student groups book iftars months ahead.', need: ['An iftar menu at $12 to 15 a head for 100 or more', 'A contact at each mosque and university group'], steps: ['Visit the Islamic Center of Maryland and the university MSAs with the offer by January.', 'Lock contracts in January.', 'Plan prep and staffing for iftar trays and suhoor.'], time: 'By January', play: 4 },
- '2-4': { why: 'In September Waqas drew $15,141 against a $2,253 share of profit. Fixed pay protects the cash for slow months.', need: ['Monthly profit from closed months', 'A separate savings account'], steps: ['Set a fixed monthly owner draw.', 'Pay quarterly distributions only from closed months.', 'Keep two months of runway in the bank.'], time: '1 week', play: 6 },
- '2-5': { why: 'Costs creep back when nobody looks. A monthly review keeps every fix in place.', need: ['The P&L closed by the 10th', 'This dashboard'], steps: ['Look at prime cost, labor, app fees, catering sales and reviews.', 'Write one fix for the biggest change.', 'Check last month\'s fix.'], time: '30 minutes a month' },
-};
-const roleInfo = [
- { do: ['Own the brand, new stores and the Frederick opening.', 'Build catering partnerships with mosques, universities and offices.', 'Approve every owner draw and distribution.'], first: ['Set a fixed monthly draw.', 'Choose the GM for &Shawarma.', 'Block one hour a week for catering visits.'] },
- { do: ['Close the books by the 10th each month.', 'Run payroll, sales tax and the monthly intercompany invoice.', 'Watch the cash and the open balances between companies.'], first: ['Find a CPA and an attorney for the company structure.', 'Rebuild October and close September.', 'Put every hour on payroll.'] },
- { do: ['Own the weekly schedule, food cost and hiring for &Shawarma.', 'Keep prime cost under 60% and labor under 28%.', 'Run the daily waste log and the opening and closing checklists.'], first: ['Promote the strongest lead (for example Mamu or Jorge).', 'Schedule to $85 of sales per labor hour.', 'Learn the Monday numbers.'] },
- { do: ['Keep recipes, par sheets and sauce production in order.', 'Keep food cost under 30% and waste under 3%.', 'Record waste every night.'], first: ['Write par sheets for the sauces and spice blends.', 'Weigh leftover cones at close.', 'Cook cones to the hourly forecast.'] },
- { do: ['Sell catering to offices, mosques, universities and state bids.', 'Keep the ezCater listing current and on time above 98%.', 'Price trays and bars and follow up on every quote.'], first: ['Drop sample trays at offices this month.', 'Register for the Small Business Reserve.', 'Book two Ramadan iftar visits.'] },
- { do: ['Post five videos a week and run the staff video program.', 'Run customer testimonials with signed releases.', 'Reply to Google reviews within 48 hours.'], first: ['Set up the clip-on mic and ring light.', 'Print the QR review cards.', 'Collect signed releases.'] },
- { do: ['Run the opening and closing checklists.', 'Handle cash and temperature logs.', 'Keep ticket times down in the rush.'], first: ['Pick two or three shift leads.', 'Give each a checklist.', 'Review tickets times every week.'] },
-];
-const calInfo = [
- { what: 'Companies book holiday parties through December. Lunch and dinner trays are easy to add to your menu now.', do: ['Send the office-party offer to past catering customers.', 'Drop sample trays at science-corridor offices.', 'Start selling iftar packages for Ramadan.'] },
- { what: 'Mosques and student groups decide Ramadan caterers in January.', do: ['Visit the Islamic Center of Maryland and university MSAs.', 'Bring a tasting and an iftar menu at $12 to 15 a head for 100 or more.', 'Lock contracts.'] },
- { what: 'The busiest catering month of the year. Dates depend on moon sighting.', do: ['Plan iftar trays, suhoor and university iftars.', 'Staff and order meat ahead of time.', 'Confirm every delivery window.'] },
- { what: 'Eid al-Fitr: large family and community orders on short notice.', do: ['Offer an Eid tray menu in advance.', 'Take pre-orders a week ahead.', 'Plan extra staff for pickup.'] },
- { what: 'Eid al-Adha brings aqiqah and family events.', do: ['Offer a meat-heavy platter menu.', 'Take orders two weeks ahead.', 'Check supply of lamb and beef early.'] },
- { what: 'Graduations and summer office events.', do: ['Offer a graduation party tray.', 'Send a note to past office customers.', 'Hold prices through the season.'] },
- { what: 'ISB Halal Food Festival: a vendor chance with a large halal crowd.', do: ['Apply as a vendor early.', 'Plan a short menu you can make fast.', 'Hand out order-direct cards.'] },
- { what: 'Welcome events for students and federal year-end spending.', do: ['Contact university MSAs for welcome events.', 'Offer agency catering before year-end.', 'Register on eMMA for state bids.'] },
-];
-const brig=[
- ['Chef-propriétaire','CEO · brand & growth','Waqas. New stores, catering partnerships, mosques, Frederick opening.','Group profit, openings on time'],
- ['Maître d’hôtel des comptes','Finance & compliance','Nadeem + outside CPA. Close by the 10th, payroll, sales tax, intercompany.','Close on time, zero payroll exceptions'],
- ['Chef de cuisine','General manager, &Shawarma','Promote the strongest lead (e.g. Mamu or Jorge). Schedule, food cost, hiring.','Prime cost < 60%, labor < 28%'],
- ['Sous-chef / commissary','Kitchen lead','Recipes, par sheets, sauce production, waste log.','Food cost < 30%, waste < 3%'],
- ['Chef de banquet','Catering & sales manager','New part-time hire, base + 5%. ezCater, offices, mosques, universities, state bids.','$15–25k/mo catering in 12 months'],
- ['Chef de communication','Content lead','Shift lead at +$2/hr. Videos, testimonials, Google profile.','5 posts/wk, +40 reviews/mo'],
- ['Chefs de partie','Shift leads (2–3)','Opening/closing checklists, cash, temperature logs.','Ticket times, checklists done']];
-const cal=[['Oct–Dec 2026','Office holiday parties; sell iftar packages',true],['Jan 2027','Lock Ramadan contracts with mosques + MSAs'],['Feb 8 – Mar 9','Ramadan: iftar trays, suhoor, university iftars'],['Mar 9–10','Eid al-Fitr catering'],['May 16–17','Eid al-Adha; aqiqah + family events'],['May–Jun','Graduations, office summer events'],['Late Aug','ISB Halal Food Festival (vendor)'],['Aug–Sep','MSA welcome events; federal year-end spending']];
-
-/* ---------- personal finance ---------- */
-// Waqas' own money, separate from the business P&Ls above. These are monthly averages given directly, not yet pulled
-// from statements. To turn this into a real month-to-month view: (1) replace the numbers below with one month's actual
-// totals each time a month closes, and (2) push a new entry to PF.periods ({label, income, expenses}) so the trend
-// chart grows a bar per month instead of showing one average.
+/* ---------- personal finance data ---------- */
+// Waqas' own money. These are monthly averages given directly, not yet pulled from statements.
+// To extend this as more comes in:
+//  - New recurring item: add a row to PF.expenses (or PF.income / PF.cash / PF.liabilities).
+//  - A month closes with real numbers: replace the averages below with that month's actuals, and push
+//    { label, income, expenses } onto PF.periods so the trend chart on Overview grows a bar per month.
+//  - A new account or card: add it to PF.cash or PF.liabilities the same way.
 const PF = {
   cash: [
     { k: 'Cash on hand', v: 10000 },
@@ -140,84 +43,7 @@ const pfCashTotal = PF.cash.reduce((a, r) => a + r.v, 0);
 const pfLiabKnown = PF.liabilities.reduce((a, r) => a + (r.balance || 0), 0);
 PF.periods = [{ label: 'Current (monthly avg)', income: pfIncomeTotal, expenses: pfExpenseTotal }];
 
-
-/* ---------- overview ---------- */
-const ICO = { up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg>', alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>', ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' };
-function renderKPIs() {
-  const k = [
-    { k: 'Net profit', a: pct(P.aug.net, P.aug.sales), s: pct(P.sep.net, P.sep.sales), t: '10 to 15%', dir: 1, good: 10, warn: 6, sub: money(P.sep.net) },
-    { k: 'Prime cost', a: pct(P.aug.food + P.aug.labor, P.aug.sales), s: pct(P.sep.food + P.sep.labor, P.sep.sales), t: '55 to 60%', dir: -1, good: 60, warn: 65 },
-    { k: 'Food cost', a: pct(P.aug.food, P.aug.sales), s: pct(P.sep.food, P.sep.sales), t: '28 to 32%', dir: -1, good: 32, warn: 35, sub: money(P.sep.food) },
-    { k: 'Labor', a: pct(P.aug.labor, P.aug.sales), s: pct(P.sep.labor, P.sep.sales), t: '25 to 30%', dir: -1, good: 30, warn: 32 },
-    { k: 'App fees', a: 29.5, s: 30.3, t: 'under 20%', dir: -1, good: 20, warn: 25, sub: 'of app sales' },
-    { k: 'Card fees', a: 2.67, s: 2.92, t: '2.2 to 2.5%', dir: -1, good: 2.5, warn: 2.7, sub: 'of card sales' }];
-  $('#kpis').innerHTML = k.map((x) => {
-    const v = x.s, st = x.dir > 0 ? (v >= x.good ? 'good' : v >= x.warn ? 'warn' : 'bad') : (v <= x.good ? 'good' : v <= x.warn ? 'warn' : 'bad');
-    const d = x.s - x.a, worse = x.dir > 0 ? d < 0 : d > 0;
-    return `<div class="stat-card"><div class="icon-badge ${st}">${st === 'good' ? ICO.ok : st === 'warn' ? ICO.up : ICO.alert}</div><div class="label">${x.k}</div><div class="value">${x.k === 'Card fees' ? v.toFixed(2) : f1(v)}%</div><div class="sub"><span class="${worse ? 'down' : 'up'}">${d > 0 ? '+' : ''}${f1(d)} pts</span> vs Aug · target ${x.t}</div></div>`;
-  }).join('');
-}
-function renderSpend() {
-  const s = P.sep, rows = [['Food and vendors', s.food], ['Labor and payroll tax', s.labor], ['Rent', s.rent], ['Delivery app fees', s.app], ['Card processing', s.cc], ['Utilities', s.util], ['Marketing', s.mkt]];
-  rows.push(['Other operating', s.sales - s.net - rows.reduce((a, r) => a + r[1], 0)]); rows.push(['Net profit', s.net]);
-  const W = 520, rh = 27, lw = 150, H = rows.length * rh + 6, max = 45; let g = '';
-  rows.forEach((r, i) => { const p = pct(r[1], s.sales), w = (W - lw - 56) * p / max, y = i * rh + 4, big = i < 2, net = r[0] === 'Net profit';
-    g += `<text x="${lw - 10}" y="${y + 14}" text-anchor="end" font-size="12.5" fill="var(--ink)">${r[0]}</text><rect x="${lw}" y="${y + 3}" width="${Math.max(w, 2)}" height="15" rx="2" fill="${net ? 'var(--success)' : big ? 'var(--danger)' : 'var(--chart)'}" fill-opacity="${big ? 0.8 : 1}"><title>${r[0]}: ${money(r[1])} (${f1(p)}%)</title></rect><text x="${lw + w + 7}" y="${y + 14}" font-size="12.5" font-weight="600" fill="var(--strong)">${f1(p)}%</text>`; });
-  $('#spend').innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="September cost breakdown">${g}</svg>`;
-}
-function renderBridge() {
-  const st = [['Today', 14.1, 't'], ['Labor', 3.0], ['Delivery', 3.75], ['Food', 3.75], ['Cards', 0.9], ['Software', 1.6], ['Marketing', -2.5], ['Catering', 6.0], ['Growth', 3.4]];
-  const total = st.reduce((a, r) => a + r[1], 0), all = [...st, ['Target', total, 't']];
-  const W = 560, H = 250, l = 30, b = 214, band = (W - l - 4) / all.length, bw = band * 0.62, y = (v) => b - v / 40 * 186; let g = '', run = 0;
-  [0, 10, 20, 30, 40].forEach((v) => { g += `<line x1="${l}" x2="${W - 2}" y1="${y(v)}" y2="${y(v)}" stroke="var(--border-soft)"/><text x="${l - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${v}</text>`; });
-  all.forEach((r, i) => { const isT = r[2] === 't', s = isT ? 0 : run, e = isT ? r[1] : run + r[1]; run = e; const hi = Math.max(s, e), lo = Math.min(s, e), x = l + i * band + (band - bw) / 2;
-    g += `<rect x="${x}" y="${y(hi)}" width="${bw}" height="${Math.max(1, y(lo) - y(hi))}" rx="2" fill="${isT ? 'var(--chart)' : r[1] >= 0 ? 'var(--success)' : 'var(--danger)'}" fill-opacity="${isT ? 1 : 0.75}"><title>${r[0]}: ${isT ? '$' + f1(r[1]) + 'k' : (r[1] > 0 ? '+' : '') + f1(r[1]) + 'k'}</title></rect>`
-      + `<text x="${x + bw / 2}" y="${y(hi) - 5}" text-anchor="middle" font-size="11" font-weight="${isT ? 700 : 500}" fill="var(--strong)">${isT ? '$' + f1(r[1]) : (r[1] > 0 ? '+' : '−') + f1(Math.abs(r[1]))}</text><text x="${x + bw / 2}" y="${b + 16}" text-anchor="middle" font-size="10.5" fill="var(--muted)">${r[0]}</text>`;
-    if (i < all.length - 1) g += `<line x1="${x + bw}" x2="${x + band}" y1="${y(e)}" y2="${y(e)}" stroke="var(--muted)" stroke-dasharray="2 2"/>`; });
-  g += `<line x1="${l}" x2="${W - 2}" y1="${b}" y2="${b}" stroke="var(--border)"/>`;
-  $('#bridge').innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:440px" role="img" aria-label="Profit bridge from $14k to $34k a month">${g}</svg>`;
-}
-function line(el, data, opt) {
-  const W = 520, H = 220, l = 42, r = 10, t = 14, b = 190, n = data.length, x = (i) => l + i * (W - l - r) / (n - 1), y = (v) => b - (v - opt.min) / (opt.max - opt.min) * (b - t); let g = '';
-  for (let v = opt.min; v <= opt.max + 1e-9; v += opt.step) g += `<line x1="${l}" x2="${W - r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--border-soft)"/><text x="${l - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">$${v.toFixed(opt.dec)}</text>`;
-  if (opt.ref) g += `<line x1="${l}" x2="${W - r}" y1="${y(opt.ref)}" y2="${y(opt.ref)}" stroke="var(--muted)" stroke-dasharray="4 4"/>`;
-  const pts = data.map((v, i) => `${x(i)},${y(v)}`).join(' ');
-  g += `<polygon points="${l},${b} ${pts} ${x(n - 1)},${b}" fill="var(--primary)" fill-opacity=".1"/><polyline points="${pts}" fill="none" stroke="var(--primary)" stroke-width="2.2" stroke-linejoin="round"/>`;
-  data.forEach((v, i) => { g += `<circle cx="${x(i)}" cy="${y(v)}" r="${i === n - 1 ? 4.5 : 2.4}" fill="${i === n - 1 ? 'var(--primary-btn)' : 'var(--bg)'}" stroke="var(--primary)" stroke-width="1.6"><title>20${months[i]}: $${v.toFixed(2)}/lb</title></circle>`; });
-  const hi = data.indexOf(Math.max(...data)), lo = data.indexOf(Math.min(...data));
-  g += `<text x="${x(hi)}" y="${y(data[hi]) - 9}" text-anchor="middle" font-size="11" fill="var(--strong)">$${data[hi].toFixed(2)}</text><text x="${x(lo)}" y="${y(data[lo]) + 17 > b - 4 ? y(data[lo]) - 9 : y(data[lo]) + 17}" text-anchor="middle" font-size="11" fill="var(--strong)">$${data[lo].toFixed(2)}</text><text x="${x(n - 1) - 7}" y="${y(data[n - 1]) - 10}" text-anchor="end" font-size="11" font-weight="700" fill="var(--primary-text)">Oct $${data[n - 1].toFixed(2)}</text>`;
-  ['24-12', '25-06', '25-12', '26-06'].forEach((m) => { const i = months.indexOf(m); g += `<text x="${x(i)}" y="${b + 18}" text-anchor="middle" font-size="11" fill="var(--muted)">${['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][+m.slice(3)]} '${m.slice(0, 2)}</text>`; });
-  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:400px" role="img" aria-label="${opt.aria}">${g}</svg>`;
-}
-function renderLeaks() {
-  $('#leakRows').innerHTML = leaks.map((x) => `<tr><td><span class="tag ${x.p === 1 ? 'bad' : x.p === 2 ? 'warn' : 'ok'}">${x.p === 1 ? 'Fix now' : x.p === 2 ? 'This month' : 'This quarter'}</span></td><td class="what"><b>${x.t}</b><small>${x.ev}</small></td><td>${x.fix}</td><td class="r">${x.v}<div style="font-weight:400;color:var(--muted);font-size:0.75rem">${x.sub}</div></td></tr>`).join('');
-}
-function renderPlate() {
-  const n = (id) => parseFloat($('#' + id).value) || 0;
-  const raw = n('oz') / 16 / (1 - n('loss') / 100), cM = raw * n('cP'), bM = raw * n('bP'), extra = n('bread') + n('veg') + n('pack'), cT = cM + extra, bT = bM + extra;
-  const cP = cT / n('cMenu') * 100, bP = bT / n('bMenu') * 100, app = 1 + n('mk') / 100, cls = (v) => (v <= 30 ? 'up' : 'down');
-  $('#plateOut').innerHTML = `<h3>Per wrap</h3><p class="card-sub">Food cost target 28 to 32%</p><table><tr><td>Raw meat needed</td><td>${raw.toFixed(3)} lb</td></tr><tr><td>Chicken meat</td><td>$${cM.toFixed(2)}</td></tr><tr><td>Beef meat</td><td>$${bM.toFixed(2)}</td></tr><tr><td>Bread, veg, sauces, packaging</td><td>$${extra.toFixed(2)}</td></tr><tr class="tot"><td>Chicken wrap plate cost</td><td>$${cT.toFixed(2)}</td></tr><tr class="tot"><td>Beef wrap plate cost</td><td>$${bT.toFixed(2)}</td></tr></table>
-    <div class="big"><div><span>Chicken food cost</span><strong class="${cls(cP)}">${f1(cP)}%</strong><span>on the apps ${f1(cT / (n('cMenu') * app) * 100)}%</span></div><div><span>Beef food cost</span><strong class="${cls(bP)}">${f1(bP)}%</strong><span>on the apps ${f1(bT / (n('bMenu') * app) * 100)}%</span></div></div>
-    <p class="note">Every $1 per lb on beef adds $${raw.toFixed(2)} per wrap, about $1,100 to $1,450 a month at current volume.</p>`;
-}
-function renderPlays() {
-  $('#playList').innerHTML = recipes.map((r, i) => `<details class="play" ${i === 0 ? 'open' : ''}><summary><div><div class="k">${r.tag.replace(' · ', ' · ')}</div><div class="t">${r.t}</div></div><div class="y"><b>${r.y}</b>${r.time}</div></summary><div class="body"><div><h5>What you need</h5><ul>${r.ing.map((x) => `<li>${x}</li>`).join('')}</ul></div><div><h5>Steps</h5><ol>${r.steps.map((x) => `<li>${x}</li>`).join('')}</ol>${r.warn ? `<div class="warnbox">${r.warn}</div>` : ''}</div></div></details>`).join('');
-}
-function renderPrep() {
-  let saved = {}; try { saved = JSON.parse(store.get('wfgs-prep') || '{}'); } catch (e) {}
-  const open = new Set();
-  const bodyOf = (x) => x ? `<div class="body"><div><h5>Why it matters</h5><p>${x.why}</p><h5>What you need</h5><ul>${x.need.map((n) => `<li>${n}</li>`).join('')}</ul></div><div><h5>How to do it</h5><ol>${x.steps.map((n) => `<li>${n}</li>`).join('')}</ol>${x.play !== undefined ? `<p><a href="#playbooks" data-play="${x.play}">Open the playbook</a></p>` : ''}</div></div>` : '';
-  $('#prepList').innerHTML = prep.map((c, ci) => `<div class="panel"><h3>${c[0]} <small>${c[1]}</small></h3><div class="bar"><i id="bar${ci}"></i></div>${c[2].map((t, ti) => { const id = `pp-${ci}-${ti}`; const x = prepInfo[`${ci}-${ti}`]; return `<div class="stp ${saved[id] ? 'done' : ''}"><input type="checkbox" id="${id}" aria-label="Done: ${t.replace(/"/g, '')}" ${saved[id] ? 'checked' : ''}><details><summary><span>${t}</span><small>${x ? x.time : ''}</small></summary>${bodyOf(x)}</details></div>`; }).join('')}</div>`).join('');
-  const upd = () => prep.forEach((c, ci) => { const d = c[2].filter((t, ti) => saved[`pp-${ci}-${ti}`]).length; $('#bar' + ci).style.width = (d / c[2].length * 100) + '%'; });
-  upd(); $('#prepList').addEventListener('change', (e) => { if (e.target.type !== 'checkbox') return; saved[e.target.id] = e.target.checked; e.target.closest('.stp').classList.toggle('done', e.target.checked); store.set('wfgs-prep', JSON.stringify(saved)); upd(); });
-  $('#prepList').addEventListener('click', (e) => { const a = e.target.closest('[data-play]'); if (!a) return; const d = document.querySelectorAll('#playList details')[+a.dataset.play]; if (d) d.open = true; });
-}
-function renderRoles() {
-  $('#roleRows').innerHTML = brig.map((b, i) => { const x = roleInfo[i]; return `<tr class="rrow"><td class="what"><b>${b[1]}</b><small>${b[0]}</small></td><td>${b[2]}<details class="more"><summary>What they do and the first 30 days</summary><div class="body"><div><h5>What they do</h5><ul>${x.do.map((n) => `<li>${n}</li>`).join('')}</ul></div><div><h5>First 30 days</h5><ol>${x.first.map((n) => `<li>${n}</li>`).join('')}</ol></div></div></details></td><td>${b[3]}</td></tr>`; }).join('');
-}
-function renderCal() { $('#calList').innerHTML = cal.map((c, i) => { const x = calInfo[i]; return `<div class="panel ${c[2] ? 'now' : ''}"><b>${c[0]}</b>${c[1]}<details class="more"><summary>What to do</summary><p>${x.what}</p><ol>${x.do.map((n) => `<li>${n}</li>`).join('')}</ol></details></div>`; }).join(''); }
-
-/* ---------- personal finance ---------- */
+/* ---------- render ---------- */
 function badge(st) { return `<div class="icon-badge ${st}">${st === 'good' ? ICO.ok : st === 'warn' ? ICO.up : ICO.alert}</div>`; }
 function renderPFKpis() {
   const net = pfIncomeTotal - pfExpenseTotal;
@@ -271,11 +97,6 @@ function spy() { const links = [...document.querySelectorAll('#nav a')]; const o
 let done = false;
 function renderAll() {
   if (done) return; done = true;
-  renderKPIs(); renderSpend(); renderBridge(); renderLeaks();
-  line($('#chickChart'), chick, { min: 1, max: 3, step: 0.5, dec: 2, ref: 1.55, aria: 'Halal chicken price per pound, Dec 2024 to Oct 2026' });
-  line($('#beefChart'), beef, { min: 5, max: 9, step: 1, dec: 0, aria: 'Halal beef price per pound, Dec 2024 to Oct 2026' });
-  ['cP', 'bP', 'oz', 'loss', 'bread', 'veg', 'pack', 'mk', 'cMenu', 'bMenu'].forEach((id) => $('#' + id).addEventListener('input', renderPlate));
-  renderPlate(); renderPlays(); renderPrep(); renderRoles(); renderCal();
   renderPFKpis(); renderPFIncome(); renderPFSpendByCat(); renderPFTrend(); renderPFExpenses(); renderPFCash(); renderPFLiab();
   try { spy(); } catch (e) {}
 }
