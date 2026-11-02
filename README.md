@@ -29,3 +29,4 @@ npm audit
 ```
 
 Security controls and how they map to SOC 2, OWASP and NIST: [SECURITY.md](SECURITY.md).
+<!-- redeploy trigger: 2026-11-02T20:20:43Z -->
