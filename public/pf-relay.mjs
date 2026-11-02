@@ -17,6 +17,7 @@
 import { spawn } from 'node:child_process';
 import { writeFileSync, mkdirSync, existsSync, rmSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 
 // The installer keeps the key in ~/.pf-relay/env (readable only by you), so the service needs no key on its command line.
@@ -32,6 +33,7 @@ const TIMEOUT_MS = 3 * 60 * 1000;
 
 if (!KEY) { console.error('Set PF_API_KEY to the relay key (ask the dashboard for it — Admin / Assistant setup).'); process.exit(1); }
 
+const RELAY_VERSION = '2026-11-02-b';
 const log = (...a) => console.log(`[${new Date().toLocaleTimeString()}]`, ...a);
 
 async function api(method, route, body) {
@@ -177,6 +179,10 @@ async function runJob(job) {
 }
 
 async function tick() {
+  working = true;
+  try { await tick1(); } finally { working = false; }
+}
+async function tick1() {
   const inbox = await api('GET', '/api/agent/inbox');
   chatActive = !!inbox.active;
   if (inbox.job) return runJob(inbox.job);
@@ -200,6 +206,20 @@ async function tick() {
   } finally { try { rmSync(workDir, { recursive: true, force: true }); } catch { /* temp files; harmless if left */ } }
   chatActive = true; // someone just wrote to it, so stay quick for the follow-up
 }
+
+// Self-update (like Chef Nerd's relay): at start and hourly, fetch the published script; if its version differs, save it
+// and exit so the service manager (launchd/systemd) starts the new one. Never replaces itself with anything that doesn't
+// parse as this script, and only when it's idle.
+let working = false;
+async function selfUpdate() {
+  try {
+    const res = await fetch(`${BASE}/pf-relay.mjs?v=${Date.now()}`, { cache: 'no-store' }); if (!res.ok) return;
+    const text = await res.text(); const m = /const RELAY_VERSION = '([^']+)'/.exec(text);
+    if (!m || m[1] === RELAY_VERSION || working || !text.startsWith('#!/usr/bin/env node')) return;
+    writeFileSync(fileURLToPath(import.meta.url), text); log(`Updated ${RELAY_VERSION} -> ${m[1]}; restarting.`); process.exit(0);
+  } catch { /* try again next hour */ }
+}
+selfUpdate(); setInterval(selfUpdate, 60 * 60 * 1000);
 
 log(`Watching ${BASE} — every ${POLL_MS / 1000}s while the chat is open on the dashboard, every ${IDLE_MS / 1000}s when nobody is using it. Claude Code only runs when a message arrives. Ctrl-C to stop.`);
 (async function loop() {
