@@ -33,7 +33,7 @@ const TIMEOUT_MS = 3 * 60 * 1000;
 
 if (!KEY) { console.error('Set PF_API_KEY to the relay key (ask the dashboard for it — Admin / Assistant setup).'); process.exit(1); }
 
-const RELAY_VERSION = '2026-11-02-b';
+const RELAY_VERSION = '2026-11-02-c';
 const log = (...a) => console.log(`[${new Date().toLocaleTimeString()}]`, ...a);
 
 async function api(method, route, body) {
@@ -142,7 +142,7 @@ function insightsPrompt(job) {
     'CONTEXT: Maryland, USA. Income is from "Distribution Business" (which carries the SBA loan) and "Unified Restaurants" (a restaurant group; he also has &Shawarma). Entity types, ownership, payroll and tax filings are unknown.',
     job.focus ? `HE ASKED YOU TO LOOK AT: ${job.focus}` : '',
     `Give 6 to 8 insights, BUSINESS FIRST (income concentration, how much of each business's income the debt takes, cash runway, tax load, owner draw vs spending, debt cost), then personal. Work from the numbers: do the arithmetic and use the real figures. You have no web access here, so do not quote current rates or tax limits as fact; where an insight depends on one, say it needs checking and point to the Savings review. If a number you need is missing (a loan balance or rate, entity type), make that its own insight asking for it.`,
-    `Reply with ONLY a JSON array, no markdown fences and no text around it. Each item: {"title": short headline, 8 words max, "why": ONE sentence with the actual numbers, "next": one concrete next step, 12 words max, "area": "business"|"debt"|"cash"|"tax"|"giving"|"spending"|"data", "priority": "high"|"medium"|"low", "impact": optional short yearly-dollar estimate or range, only if the arithmetic supports it}. Order by priority, high first. Plain words, no jargon, no filler.`,
+    `Reply with ONLY a JSON array, no markdown fences and no text around it. Each item: {"title": short headline, 8 words max, "why": ONE sentence with the actual numbers, "next": one concrete next step, 12 words max, "area": "business"|"debt"|"cash"|"tax"|"giving"|"spending"|"data", "priority": "high"|"medium"|"low", "impact": optional short yearly-dollar estimate or range, only if the arithmetic supports it}. Order by priority, high first. Plain words, no jargon, no filler. Accuracy rules: before you write any ranking or comparison ("largest", "more than", "X% of Y"), check it against the list of numbers; you only have one snapshot of monthly averages, so never claim a trend, a change over time or what his balances "show"; one insight per fact, never two cards about the same thing.`,
   ].filter(Boolean).join('\n\n');
 }
 // The model sometimes wraps the array in prose or a fence: take the outermost [...] and make sure it parses as cards.
