@@ -33,7 +33,7 @@ const TIMEOUT_MS = 3 * 60 * 1000;
 
 if (!KEY) { console.error('Set PF_API_KEY to the relay key (ask the dashboard for it — Admin / Assistant setup).'); process.exit(1); }
 
-const RELAY_VERSION = '2026-11-02-g';
+const RELAY_VERSION = '2026-11-02-h';
 const log = (...a) => console.log(`[${new Date().toLocaleTimeString()}]`, ...a);
 
 async function api(method, route, body) {
@@ -122,6 +122,7 @@ function researchPrompt(job) {
   return [
     `You are a research analyst preparing a savings briefing for Waqas, an owner-operator, to take to his CPA and lender. Today is ${today}. You are not his accountant, attorney or a licensed advisor: say so once at the top, and write everything as researched options with eligibility and risks, never as "do this".`,
     `HIS NUMBERS (monthly averages from his dashboard, the only financial data you have; anything you assume must be listed under Assumptions):\n${JSON.stringify(job.data, null, 1)}`,
+    bankBlock(job),
     `WHAT IS KNOWN ABOUT HIS SITUATION: he lives in Maryland, USA. Income comes from "Distribution Business" and "Unified Restaurants" (a restaurant group; his business also includes &Shawarma). He has an SBA loan on the distribution business, a mortgage, a HELOC, a BOA loan, a trust account, and gives about $4,000 a month to charity and family. Entity types, ownership %, payroll and tax filings are NOT known: list the questions his CPA needs to answer instead of guessing.`,
     job.focus ? `HE ASKED YOU TO FOCUS ON: ${job.focus}` : '',
     `DO REAL RESEARCH with WebSearch and WebFetch. Read primary sources (IRS, SBA, Maryland Comptroller and DLLR/Commerce, lender pages), check dates, and prefer current-year figures. Cover, in this priority order, only what applies:
@@ -135,10 +136,15 @@ For every idea give: what it is, estimated yearly dollar impact as a RANGE with 
     `FORMAT: markdown. Start with a 5-line summary of the biggest opportunities and a total range of possible yearly savings. Then "## Opportunities" (ranked, each as a short ### section), "## Questions for your CPA", "## Assumptions and what I could not verify". Plain language, short sentences, figures not adjectives. Return ONLY the report.`,
   ].filter(Boolean).join('\n\n');
 }
+// When his bank is linked the jobs also get real figures from it. They outrank the monthly averages where they disagree.
+function bankBlock(job) {
+  return job.bank ? `REAL BANK ACTUALS (from his linked bank accounts; these are real transactions, so where they disagree with the monthly averages above, trust these and say so):\n${JSON.stringify(job.bank, null, 1)}` : '';
+}
 function insightsPrompt(job) {
   return [
     'You write short, sharp financial insights for a busy business owner (Waqas). He reads them in 30 seconds on a dashboard. You are an analyst, not his accountant or a licensed advisor.',
     `HIS NUMBERS (monthly averages from his dashboard; the only data you have):\n${JSON.stringify(job.data, null, 1)}`,
+    bankBlock(job),
     'CONTEXT: Maryland, USA. Income is from "Distribution Business" (which carries the SBA loan) and "Unified Restaurants" (a restaurant group; he also has &Shawarma). Entity types, ownership, payroll and tax filings are unknown.',
     job.focus ? `HE ASKED YOU TO LOOK AT: ${job.focus}` : '',
     `Give 6 to 8 insights, BUSINESS FIRST (income concentration, how much of each business's income the debt takes, cash runway, tax load, owner draw vs spending, debt cost), then personal. Work from the numbers: do the arithmetic and use the real figures. You have no web access here, so do not quote current rates or tax limits as fact; where an insight depends on one, say it needs checking and point to the Savings review. If a number you need is missing (a loan balance or rate, entity type), make that its own insight asking for it.`,
@@ -158,6 +164,7 @@ function reportPrompt(job) {
   return [
     `You write the overview report for Waqas, a busy business owner: one clear action plan he can read in five minutes and hand to his CPA. Today is ${today}. You are an analyst, not his accountant, attorney or a licensed advisor; say so once, in the last line.`,
     `HIS NUMBERS (monthly averages from his dashboard):\n${JSON.stringify(job.data, null, 1)}`,
+    bankBlock(job),
     job.insights ? `INSIGHT CARDS ALREADY WRITTEN (JSON):\n${job.insights}` : 'No insight cards have been generated yet.',
     job.savings_report ? `THE SAVINGS RESEARCH ALREADY DONE (with web sources; this is where any rate, limit, program or rule must come from):\n${job.savings_report}` : 'No savings research has been run yet: so make no claims about current rates, tax limits or programs, and tell him to run the Savings review for those.',
     job.focus ? `HE ASKED THE REPORT TO EMPHASISE: ${job.focus}` : '',

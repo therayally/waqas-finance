@@ -6,7 +6,8 @@
 // machine-to-machine endpoint the relay calls from the person's own computer, which has no session cookie.
 // Bearer auth isn't cookie-based, so it isn't CSRF-able the way api/pf.js and api/chat.js are; no CSRF check here.
 import { safeEqual, audit } from '../../lib/security.js';
-import { getChat, setChat, getActive, getJobs, setJobs, getPF, getRelaySeen, setRelaySeen } from '../../lib/store.js';
+import { getChat, setChat, getActive, getJobs, setJobs, getPF, getRelaySeen, setRelaySeen, getBanks, getBankTx } from '../../lib/store.js';
+import { bankSummary } from '../../lib/bank.js';
 
 export const config = { runtime: 'nodejs' };
 
@@ -18,6 +19,11 @@ const ACTIVE_MS = 60 * 1000; // the chat counts as in use for a minute after its
 function latestFindings(jobs) {
   const done = (kind) => [...jobs].reverse().find((j) => (j.kind || 'savings') === kind && j.status === 'done' && j.report);
   return { savings_report: done('savings')?.report || '', insights: done('insights')?.report || '' };
+}
+
+// Real bank actuals (balances, monthly in/out, recurring costs), only when a bank is linked: never raw transactions.
+async function bankFor() {
+  try { const { items } = await getBanks(); if (!items.length) return null; return bankSummary(items, Object.values((await getBankTx()).tx)); } catch { return null; }
 }
 
 async function core(request) {
@@ -39,7 +45,7 @@ async function core(request) {
     if (job) {
       job.status = 'running'; job.started_at = now;
       try { await setJobs(jobs); } catch { /* worst case it is handed out again */ }
-      return Response.json({ message: null, active, job: { id: job.id, kind: job.kind || 'savings', focus: job.focus || '', data: await getPF(null), ...(job.kind === 'report' ? latestFindings(jobs) : {}) } }, { headers: { 'Cache-Control': 'no-store' } });
+      return Response.json({ message: null, active, job: { id: job.id, kind: job.kind || 'savings', focus: job.focus || '', data: await getPF(null), bank: await bankFor(), ...(job.kind === 'report' ? latestFindings(jobs) : {}) } }, { headers: { 'Cache-Control': 'no-store' } });
     }
     return Response.json({ message: null, active }, { headers: { 'Cache-Control': 'no-store' } });
   }

@@ -268,6 +268,31 @@ function wireInsights() {
   });
 }
 
+/* ---------- bank accounts (Plaid) ---------- */
+const catName = (c) => String(c || 'OTHER').toLowerCase().replace(/_/g, ' ').replace(/^./, (x) => x.toUpperCase());
+function renderBank(d) {
+  const st = $('#bankStatus');
+  $('#bankSync').hidden = !(d.items && d.items.length);
+  if (!d.configured) { st.textContent = 'Plaid isn\'t set up yet — open "Connect or manage banks" for the steps.'; $('#bankAccts').innerHTML = ''; $('#bankMonthlyWrap').hidden = true; $('#bankNote').hidden = true; return; }
+  if (!d.items.length) { st.textContent = 'No bank connected yet.'; $('#bankAccts').innerHTML = ''; $('#bankMonthlyWrap').hidden = true; $('#bankNote').hidden = true; return; }
+  const last = Math.max(...d.items.map((i) => i.synced_at || 0));
+  st.textContent = `${d.items.length} bank${d.items.length === 1 ? '' : 's'}, ${d.tx_count} transactions${last ? ', synced ' + new Date(last).toLocaleString() : ''}${d.env === 'sandbox' ? ' — TEST MODE (fake banks)' : ''}.`;
+  $('#bankAccts').innerHTML = `<table class="ui-t"><thead><tr><th>Account</th><th class="r">Balance</th></tr></thead><tbody>${d.items.flatMap((i) => (i.accounts || []).map((a) => `<tr><td>${escapeHtml(i.institution?.name || '')} — ${escapeHtml(a.name)}${a.mask ? ' ····' + escapeHtml(a.mask) : ''}</td><td class="r">${a.current == null ? '—' : money(a.current)}</td></tr>`)).join('')}</tbody></table>`;
+  const m = [...(d.monthly || [])].reverse();
+  $('#bankMonthlyWrap').hidden = !m.length; $('#bankNote').hidden = !m.length;
+  $('#bankMonthly').innerHTML = m.map((x) => `<tr><td>${escapeHtml(x.month)}</td><td class="r">${money(x.income)}</td><td class="r">${money(x.expenses)}</td><td class="r"><span class="${x.net >= 0 ? 'up' : 'down'}">${x.net >= 0 ? '+' : '−'}${money(Math.abs(x.net))}</span></td><td>${(x.top || []).slice(0, 3).map((c) => escapeHtml(catName(c.cat)) + ' ' + money(c.total)).join(', ')}</td></tr>`).join('');
+}
+async function loadBank() { try { const r = await fetch('/api/plaid'); if (r.ok) renderBank(await r.json()); } catch { /* shown on next load */ } }
+function wireBank() {
+  $('#bankSync').addEventListener('click', async () => {
+    $('#bankSync').disabled = true; $('#bankStatus').textContent = 'Syncing…';
+    try { const r = await fetch('/api/plaid', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'sync' }) }); if (!r.ok) throw new Error(await r.text()); await loadBank(); }
+    catch (e) { $('#bankStatus').textContent = String(e.message || e); }
+    finally { $('#bankSync').disabled = false; }
+  });
+  loadBank();
+}
+
 /* ---------- connect your AI: is the relay on your computer checking in? ---------- */
 function renderConnect() {
   const el = $('#connStatus'), dot = $('#navConn'), sub = $('#chatConn'); if (!el) return;
@@ -360,6 +385,7 @@ function wireSavings() {
   wireChat();
   wireSavings();
   wireInsights();
+  wireBank();
   wireReport();
   try { PF = await api(); renderAll(); try { spy(); } catch (e) {} }
   catch (e) { $('#pfMsg').textContent = 'Could not load your data: ' + (e.message || e); $('#pfMsg').style.color = 'var(--danger)'; }

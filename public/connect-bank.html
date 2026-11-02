@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Connect a bank · Waqas' Personal Finance</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="login-wrap" style="align-items:flex-start">
+  <div class="login-card" style="max-width:34rem;margin-top:2rem">
+    <div class="login-header"><div class="dot" aria-hidden="true"></div><h1>Connect a bank</h1><p>Read-only view of balances and transactions, through Plaid</p></div>
+    <p id="cbStatus" class="note">Loading…</p>
+    <div id="cbSetup" hidden class="chat-setup">
+      <p><b>Plaid isn't set up yet.</b> In the Plaid dashboard (dashboard.plaid.com) create an account and copy your <code>client_id</code> and <code>secret</code>. In the Vercel project's Environment Variables add <code>PLAID_CLIENT_ID</code>, <code>PLAID_SECRET</code> and <code>PLAID_ENV</code> (<code>sandbox</code> for fake test banks, <code>production</code> for his real bank), then redeploy. For banks that sign in on their own site, such as Bank of America, also add this page's address to Plaid's allowed redirect URIs and set <code>PLAID_REDIRECT_URI</code> to the same address.</p>
+    </div>
+    <div id="cbSignin" hidden><a class="btn btn-primary" href="/login.html" style="width:100%;justify-content:center">Sign in</a></div>
+    <button id="cbConnect" class="btn btn-primary" type="button" style="width:100%;justify-content:center" hidden>Connect a bank</button>
+    <div id="cbBanks" style="margin-top:1rem"></div>
+    <div style="display:flex;gap:0.6rem;margin-top:1rem;flex-wrap:wrap"><button id="cbSync" class="btn" type="button" hidden>Sync now</button><a class="btn" href="/#bank">Back to the dashboard</a></div>
+    <p class="note">Plaid never shares his bank password with this app. The bank access token is stored encrypted and is never shown. You can disconnect a bank here at any time.</p>
+  </div>
+</div>
+<script src="/connect-bank.js" defer></script>
+</body>
+</html>
