@@ -12,6 +12,14 @@ export const config = { runtime: 'nodejs' };
 const uid = () => Math.random().toString(36).slice(2, 10);
 const MAX_LEN = 4000;
 const KEEP = 200; // messages kept; old ones trimmed so the blob and the prompt sent to the relay stay small
+const MAX_ATTACH = 4;
+
+function cleanAttachments(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, MAX_ATTACH)
+    .filter((a) => a && /^[a-z0-9]{6,40}$/i.test(a.id) && typeof a.file_name === 'string' && typeof a.content_type === 'string')
+    .map((a) => ({ id: a.id, file_name: String(a.file_name).slice(0, 120), content_type: a.content_type, size: Number(a.size) || 0 }));
+}
 
 async function core(request) {
   const s = settingsFrom();
@@ -28,9 +36,12 @@ async function core(request) {
     const len = Number(request.headers.get('content-length') || 0); if (len > 8192) return new Response('Payload too large', { status: 413 });
     let body; try { body = await request.json(); } catch { return new Response('Bad JSON', { status: 400 }); }
     const text = String(body?.body || '').trim().slice(0, MAX_LEN);
-    if (!text) return new Response('Empty message', { status: 400 });
+    const attachments = cleanAttachments(body?.attachments);
+    if (!text && !attachments.length) return new Response('Empty message', { status: 400 });
     const messages = await getChat([]);
-    messages.push({ id: uid(), role: 'user', body: text, at: Date.now(), answered: false });
+    const row = { id: uid(), role: 'user', body: text, at: Date.now(), answered: false };
+    if (attachments.length) row.attachments = attachments;
+    messages.push(row);
     const trimmed = messages.slice(-KEEP);
     try { await setChat(trimmed); } catch (e) { audit('chat.save_failed', request, { error: String(e.message || e) }); return new Response('Could not save — try again', { status: 502 }); }
     audit('chat.sent', request);

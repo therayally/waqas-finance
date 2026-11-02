@@ -82,15 +82,18 @@
   <div class="chat-float-head"><span>Assistant</span><button type="button" id="chatClose" class="btn" style="padding:0.25rem 0.5rem">&times;</button></div>
   <p class="chat-float-sub">Runs as Claude Code on your own computer, not a hosted AI this app pays for. <button type="button" id="chatSetupToggle" class="linklike">Setup</button></p>
   <div id="chatSetup" class="chat-setup" hidden>
-    <p>Needs Node 18+ and Claude Code (<code>claude</code>) installed and signed in on this machine.</p>
-    <ol>
-      <li>Download: <code>curl -fsSLO https:/<wbr>/waqas-finance.vercel.app/pf-relay.mjs</code></li>
-      <li>Get the relay key from whoever set this app up (<code>AGENT_RELAY_KEY</code>).</li>
-      <li>Run: <code>PF_API_KEY=&lt;key&gt; node pf-relay.mjs</code> — leave it running.</li>
-    </ol>
+    <p>On the Mac that has Claude Code installed and signed in, paste this once in Terminal. It installs the relay as a background service that starts at login — no window to leave open.</p>
+    <code id="chatInstallCmd" class="chat-cmd">loading…</code>
+    <button type="button" id="chatCopyCmd" class="btn" style="margin-top:0.4rem;padding:0.3rem 0.7rem">Copy command</button>
   </div>
   <div id="chatLog" class="chat-log"></div>
-  <form id="chatForm" class="chat-form"><input class="input" id="chatInput" name="body" placeholder="e.g. add $80 gym membership" autocomplete="off" required><button class="btn btn-primary" type="submit">Send</button></form>
+  <div id="chatAttachChip" class="chat-attach-chip" hidden></div>
+  <form id="chatForm" class="chat-form">
+    <input type="file" id="chatFile" accept="image/jpeg,image/png,image/webp,image/gif,image/heic,application/pdf" hidden>
+    <button type="button" id="chatAttachBtn" class="btn" title="Attach a receipt, statement or photo (images and PDFs, 3.5MB max)" style="padding:0.55rem 0.7rem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M21.44 11.05 12.25 20.24a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.41l8.49-8.49"/></svg></button>
+    <input class="input" id="chatInput" name="body" placeholder="e.g. add $80 gym membership, or attach a receipt" autocomplete="off">
+    <button class="btn btn-primary" type="submit">Send</button>
+  </form>
 </div>
 
 <script src="/app.js" defer></script>

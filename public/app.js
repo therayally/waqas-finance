@@ -110,10 +110,14 @@ function spy() { const links = [...document.querySelectorAll('#nav a')]; const o
  * answer (and anything it changed on the dashboard) shows up once the relay's done. */
 let chatMessages = [];
 let chatOpen = false;
+let pendingAttachment = null; // {id, file_name, content_type, size} once uploaded, before the message is sent
 function renderChat() {
   const log = $('#chatLog');
   const stayedAtBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
-  log.innerHTML = chatMessages.map((m) => `<div class="msg ${m.role}${m.role === 'user' && !m.answered ? ' pending' : ''}">${escapeHtml(m.body)}</div>`).join('');
+  log.innerHTML = chatMessages.map((m) => {
+    const atts = (m.attachments || []).map((a) => `<small class="att">📎 ${escapeHtml(a.file_name)}</small>`).join('');
+    return `<div class="msg ${m.role}${m.role === 'user' && !m.answered ? ' pending' : ''}">${escapeHtml(m.body)}${atts}</div>`;
+  }).join('');
   if (stayedAtBottom) log.scrollTop = log.scrollHeight;
 }
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
@@ -128,22 +132,64 @@ function setChatOpen(open) {
   $('#chatFloat').hidden = !open; $('#chatFab').setAttribute('aria-expanded', String(open));
   if (open) { $('#chatFabDot').hidden = true; $('#chatInput').focus(); }
 }
+function renderAttachChip() {
+  const chip = $('#chatAttachChip');
+  if (!pendingAttachment) { chip.hidden = true; chip.innerHTML = ''; return; }
+  chip.hidden = false;
+  chip.innerHTML = `<span>📎 ${escapeHtml(pendingAttachment.file_name)} (${Math.round(pendingAttachment.size / 1024)} KB)</span><button type="button" id="chatAttachRemove" title="Remove">&times;</button>`;
+  $('#chatAttachRemove').addEventListener('click', () => { pendingAttachment = null; renderAttachChip(); });
+}
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] || '');
+    r.onerror = () => reject(new Error('Could not read the file'));
+    r.readAsDataURL(file);
+  });
+}
 function wireChat() {
   $('#chatFab').addEventListener('click', () => setChatOpen(!chatOpen));
   $('#chatClose').addEventListener('click', () => setChatOpen(false));
   $('#chatSetupToggle').addEventListener('click', () => { const el = $('#chatSetup'); el.hidden = !el.hidden; });
+  // One-command install with the relay key filled in (same idea as Chef Nerd's "Connect your AI" page)
+  let installCmd = '';
+  fetch('/api/relay-key').then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status === 503 ? 'The relay key is not set up yet.' : 'Could not load the key.')))).then((d) => {
+    installCmd = `curl -fsSL ${location.origin}/install-relay.sh | PF_API_KEY=${d.key} bash`;
+    $('#chatInstallCmd').textContent = installCmd;
+  }).catch((e) => { $('#chatInstallCmd').textContent = e.message; });
+  $('#chatCopyCmd').addEventListener('click', async () => {
+    if (!installCmd) return;
+    try { await navigator.clipboard.writeText(installCmd); $('#chatCopyCmd').textContent = 'Copied'; setTimeout(() => { $('#chatCopyCmd').textContent = 'Copy command'; }, 2000); }
+    catch { const r = document.createRange(); r.selectNodeContents($('#chatInstallCmd')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+  });
+  $('#chatAttachBtn').addEventListener('click', () => $('#chatFile').click());
+  $('#chatFile').addEventListener('change', async () => {
+    const file = $('#chatFile').files[0]; $('#chatFile').value = ''; if (!file) return;
+    if (file.size > 3.5 * 1024 * 1024) { msg('That file is over 3.5MB — try a smaller photo or a lower-res scan.', true); return; }
+    $('#chatAttachBtn').disabled = true;
+    try {
+      const data_base64 = await fileToBase64(file);
+      const r = await fetch('/api/chat/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_name: file.name, content_type: file.type, data_base64 }) });
+      if (r.status === 401) { location.href = '/login.html'; return; }
+      if (!r.ok) throw new Error(await r.text().catch(() => 'Could not upload'));
+      pendingAttachment = await r.json(); renderAttachChip();
+    } catch (err) { msg(String(err.message || err), true); }
+    finally { $('#chatAttachBtn').disabled = false; }
+  });
   $('#chatForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const input = $('#chatInput'), text = input.value.trim(); if (!text) return;
+    const input = $('#chatInput'), text = input.value.trim();
+    if (!text && !pendingAttachment) return;
+    const attachment = pendingAttachment; pendingAttachment = null; renderAttachChip();
     input.value = ''; input.disabled = true;
     try {
-      const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body: text }) });
+      const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body: text, attachments: attachment ? [attachment] : [] }) });
       if (r.status === 401) { location.href = '/login.html'; return; }
       if (!r.ok) throw new Error(await r.text().catch(() => 'Could not send'));
       const d = await r.json(); chatMessages = d.messages || []; renderChat();
       // after sending, a dashboard-affecting reply may land any moment, so refresh the numbers once it does
       pollChatForReply();
-    } catch (err) { input.value = text; msg(String(err.message || err), true); }
+    } catch (err) { input.value = text; pendingAttachment = attachment; renderAttachChip(); msg(String(err.message || err), true); }
     finally { input.disabled = false; input.focus(); }
   });
   loadChat();

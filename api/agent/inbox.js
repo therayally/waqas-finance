@@ -32,7 +32,7 @@ async function core(request) {
     .map((m) => `${m.role === 'user' ? 'Waqas' : 'You'}: ${m.body}`)
     .join('\n');
 
-  return Response.json({ message: { id: msg.id, body: msg.body }, history }, { headers: { 'Cache-Control': 'no-store' } });
+  return Response.json({ message: { id: msg.id, body: msg.body, attachments: msg.attachments || [] }, history }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export default async function handler(req, res) {
