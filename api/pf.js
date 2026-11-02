@@ -1,10 +1,16 @@
 // GET returns the current personal-finance data (seeding it on first run); POST applies one add/edit/remove
 // action and returns the updated data. Both need a valid owner session (same gate as the rest of the app) and
 // POST also needs a same-site request (CSRF guard), same pattern as api/login.js.
+//
+// This runs on the Node.js runtime, not edge: @vercel/blob (lib/store.js) needs Node stream/undici internals
+// that the edge sandbox doesn't have. Everything else here — the session check, CSRF guard, audit log — is the
+// same Fetch-API code the rest of the app uses on edge, so `core()` below still takes a Web Request and returns
+// a Web Response; `handler()` just adapts Node's (req, res) to and from that, so the security logic itself,
+// which is what actually needs to stay correct, is never duplicated or rewritten.
 import { config as settingsFrom, checkToken, readCookie, sameOrigin, audit } from '../lib/security.js';
 import { getPF, setPF } from '../lib/store.js';
 
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'nodejs' };
 
 // What the dashboard shows before anyone has added or changed anything.
 const SEED = {
@@ -57,7 +63,7 @@ function applyAction(data, body) {
   return data;
 }
 
-export default async function handler(request) {
+async function core(request) {
   const s = settingsFrom();
   const session = s.ok ? await checkToken(s.secret, readCookie(request)) : { ok: false };
   if (!session.ok) return new Response('Unauthorized', { status: 401, headers: { 'Cache-Control': 'no-store' } });
@@ -79,4 +85,18 @@ export default async function handler(request) {
   }
 
   return new Response('Method not allowed', { status: 405, headers: { Allow: 'GET, POST', 'Cache-Control': 'no-store' } });
+}
+
+// Node (req, res) -> Web Request -> core() -> Web Response -> Node res. Vercel's Node runtime already parses
+// a JSON body into req.body for us when Content-Type is application/json, which is all this endpoint accepts.
+export default async function handler(req, res) {
+  const headers = new Headers();
+  for (const [k, v] of Object.entries(req.headers)) { if (v != null) headers.set(k, Array.isArray(v) ? v.join(', ') : String(v)); }
+  const url = `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}${req.url}`;
+  const init = { method: req.method, headers };
+  if (req.method === 'POST') init.body = JSON.stringify(req.body ?? {});
+  const response = await core(new Request(url, init));
+  res.statusCode = response.status;
+  response.headers.forEach((v, k) => { if (k.toLowerCase() !== 'content-length') res.setHeader(k, v); });
+  res.end(await response.text());
 }
