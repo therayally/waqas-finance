@@ -8,7 +8,7 @@
     "audit": "npm audit --audit-level=moderate"
   },
   "dependencies": {
-    "@vercel/functions": "3.9.11",
+    "@vercel/functions": "3.11.0",
     "@vercel/blob": "2.8.2"
   }
 }
